@@ -1,0 +1,6 @@
+{
+  "name": "Primix Code Studio",
+  "description": "Полноценная среда разработки (IDE) в стиле VS Code для декларативного языка программирования Primix (PX) с синтаксической подсветкой, автодополнением, LSP-валидацией, интерактивным отладчиком и ИИ-помощником Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

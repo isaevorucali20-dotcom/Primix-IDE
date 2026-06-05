@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "ProjectFile": {
+      "title": "ProjectFile",
+      "description": "A template or custom file in the Primix compiler workspace",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Unique virtual path of the file" },
+        "name": { "type": "string", "description": "Human-readable filename with extension" },
+        "platform": { "type": "string", "description": "Target runtime or system, like 'win7', 'win10_11', 'linux', 'macos', or 'universal'" },
+        "content": { "type": "string", "description": "Source code content of the file" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of last local or remote update" }
+      },
+      "required": ["path", "name", "platform", "content"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "An interactive message exchanged with the Primix Copilot AI assistant",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "description": "The author role, can be 'user' or 'model'" },
+        "text": { "type": "string", "description": "Message content supporting Markdown formatting" },
+        "timestamp": { "type": "string", "description": "HH:MM:SS text display timestamp" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of message creation" }
+      },
+      "required": ["role", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "files/{fileId}": {
+      "schema": "ProjectFile",
+      "description": "Managed code templates, script files or launch sequences in the workspace"
+    },
+    "chat/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Historical chat conversation messages with the Gemini Primix Copilot"
+    }
+  }
+}
