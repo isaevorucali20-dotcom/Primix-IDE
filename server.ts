@@ -3,11 +3,48 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+// Helper to scan directory dynamically
+function getWorkspaceFiles(): any[] {
+  const root = process.cwd();
+  const allowedExtensions = [".pmx", ".html", ".js", ".ts", ".json", ".bat", ".ps1", ".md"];
+  const ignoredFiles = ["package-lock.json", "tsconfig.json"];
+  const results: any[] = [];
+
+  function scan(dir: string, relPath = "") {
+    const list = fs.readdirSync(dir);
+    for (const file of list) {
+      if (file === "node_modules" || file === "dist" || file === ".git" || file === ".gemini") {
+        continue;
+      }
+      const fullPath = path.join(dir, file);
+      const relative = relPath ? `${relPath}/${file}` : file;
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        scan(fullPath, relative);
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (allowedExtensions.includes(ext) && !ignoredFiles.includes(file)) {
+          results.push({
+            name: file,
+            path: "/" + relative,
+            content: fs.readFileSync(fullPath, "utf-8"),
+            platform: file.endsWith(".pmx") ? "universal" : "custom"
+          });
+        }
+      }
+    }
+  }
+
+  scan(root);
+  return results;
+}
 
 app.use(express.json());
 
@@ -416,6 +453,123 @@ app.post("/api/gemini/chat", async (req, res) => {
       });
     }
   }
+});
+
+// File Sync & Manipulation Endpoints
+app.get("/api/files", (req, res) => {
+  try {
+    const filesList = getWorkspaceFiles();
+    res.json(filesList);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/files/save", (req, res) => {
+  try {
+    const { filePath, content } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: "Missing filePath" });
+    }
+    const safePath = path.join(process.cwd(), filePath.replace(/^\//, ""));
+    if (!safePath.startsWith(process.cwd())) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    fs.mkdirSync(path.dirname(safePath), { recursive: true });
+    fs.writeFileSync(safePath, content, "utf-8");
+    res.json({ success: true, message: "Файл сохранен на диск" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/files/create", (req, res) => {
+  try {
+    const { fileName } = req.body;
+    if (!fileName) return res.status(400).json({ error: "Имя файла обязательно" });
+    const safePath = path.join(process.cwd(), fileName.replace(/^\//, ""));
+    if (!safePath.startsWith(process.cwd())) {
+      return res.status(403).json({ error: "Доступ запрещен" });
+    }
+    if (fs.existsSync(safePath)) {
+      return res.status(400).json({ error: "Файл уже существует" });
+    }
+    fs.mkdirSync(path.dirname(safePath), { recursive: true });
+    
+    let defaultContent = "";
+    if (fileName.endsWith(".pmx")) {
+      defaultContent = `# Новый исполняемый скрипт Primix\nport 8080\n\ntable users (id, name, status)\n\npath /api/status -> welcome "Server is running"\n`;
+    } else if (fileName.endsWith(".html")) {
+      defaultContent = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n    <meta charset="UTF-8">\n    <title>Новый GUI экран</title>\n    <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-[#111216] text-[#e2e8f0] flex items-center justify-center min-h-screen font-sans p-6">\n    <div class="text-center p-8 bg-[#1e202a] rounded-xl border border-white/5 shadow-2xl max-w-md w-full">\n        <h1 class="text-3xl font-extrabold text-[#0071e3] mb-3">HTML Экран</h1>\n        <p class="text-xs text-slate-400 mb-6 font-mono">[${fileName}]</p>\n        <p class="text-sm text-slate-300">Начните редактирование в Primix IDE, и изменения в реальном времени отобразятся здесь!</p>\n    </div>\n</body>\n</html>\n`;
+    } else if (fileName.endsWith(".js")) {
+      defaultContent = `// Сценарий автоматизации JavaScript\nconsole.log("Запуск сценария...");\n`;
+    } else {
+      defaultContent = `# Новый файл\n`;
+    }
+    
+    fs.writeFileSync(safePath, defaultContent, "utf-8");
+    res.json({
+      success: true,
+      file: {
+        name: path.basename(fileName),
+        path: "/" + fileName.replace(/^\//, ""),
+        content: defaultContent,
+        platform: fileName.endsWith(".pmx") ? "universal" : "custom"
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/files/delete", (req, res) => {
+  try {
+    const { filePath } = req.body;
+    if (!filePath) return res.status(400).json({ error: "Путь к файлу обязателен" });
+    const safePath = path.join(process.cwd(), filePath.replace(/^\//, ""));
+    if (!safePath.startsWith(process.cwd())) {
+      return res.status(403).json({ error: "Доступ запрещен" });
+    }
+    if (fs.existsSync(safePath)) {
+      fs.unlinkSync(safePath);
+    }
+    res.json({ success: true, message: "Файл успешно удален" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/files/rename", (req, res) => {
+  try {
+    const { oldPath, newPath } = req.body;
+    if (!oldPath || !newPath) return res.status(400).json({ error: "Старый и новый пути обязательны" });
+    const safeOldPath = path.join(process.cwd(), oldPath.replace(/^\//, ""));
+    const safeNewPath = path.join(process.cwd(), newPath.replace(/^\//, ""));
+    if (!safeOldPath.startsWith(process.cwd()) || !safeNewPath.startsWith(process.cwd())) {
+      return res.status(403).json({ error: "Доступ запрещен" });
+    }
+    if (!fs.existsSync(safeOldPath)) {
+      return res.status(404).json({ error: "Файл не найден" });
+    }
+    if (fs.existsSync(safeNewPath)) {
+      return res.status(450).json({ error: "Файл с таким именем уже существует" });
+    }
+    fs.renameSync(safeOldPath, safeNewPath);
+    res.json({ success: true, message: "Файл переименован" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Explicitly serve HTML files in active root so user can open them in individual browser tabs!
+app.get("/*.html", (req, res, next) => {
+  const file = req.path.substring(1);
+  const fullPath = path.join(process.cwd(), file);
+  if (fs.existsSync(fullPath)) {
+    res.setHeader("Content-Type", "text/html");
+    return res.sendFile(fullPath);
+  }
+  next();
 });
 
 // Setup Vite Dev Middleware or Static Serving

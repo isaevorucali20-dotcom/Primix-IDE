@@ -33,7 +33,9 @@ import {
   CloudOff,
   LogOut,
   LogIn,
-  TrendingUp
+  TrendingUp,
+  Trash2,
+  Edit2
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -87,6 +89,163 @@ export default function App() {
   });
 
   const activeFile = files.find(f => f.path === activeFilePath) || files[0];
+
+  // Live file system states
+  const [showNewFileInput, setShowNewFileInput] = useState<boolean>(false);
+  const [newFileName, setNewFileName] = useState<string>("");
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [tempRenameName, setTempRenameName] = useState<string>("");
+  const [showLivePreview, setShowLivePreview] = useState<boolean>(true);
+
+  // Synchronize on mount from real backend disk (VS Code like experience)
+  useEffect(() => {
+    async function fetchHostFiles() {
+      try {
+        const res = await fetch("/api/files");
+        if (res.ok) {
+          const diskFiles = await res.json();
+          if (diskFiles && diskFiles.length > 0) {
+            setFiles(diskFiles);
+            // Sync activeFilePath if existing path is on disk
+            const exists = diskFiles.some((f: any) => f.path === activeFilePath);
+            if (!exists) {
+              const preferred = diskFiles.find((f: any) => f.path === "/universal_android_cloud.pmx") || diskFiles[0];
+              setActiveFilePath(preferred.path);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load files from local host filesystem API:", err);
+      }
+    }
+    fetchHostFiles();
+  }, []);
+
+  const handleCreateFileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFileName.trim()) return;
+    
+    let pathName = newFileName.trim();
+    if (!pathName.startsWith("/")) pathName = "/" + pathName;
+
+    try {
+      const res = await fetch("/api/files/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: pathName })
+      });
+
+      if (res.ok) {
+        const body = await res.json();
+        if (body.success && body.file) {
+          const merged = [...files, body.file];
+          setFiles(merged);
+          localStorage.setItem("primix_files", JSON.stringify(merged));
+          setActiveFilePath(body.file.path);
+          setNewFileName("");
+          setShowNewFileInput(false);
+          showToastMsg(`Экран/скрипт ${body.file.name} успешно создан!`);
+          setTerminalLogs(prev => [
+            ...prev,
+            { text: `[SYSTEM] Created file: ${body.file.path} on disk.`, type: "system" }
+          ]);
+        } else {
+          showToastMsg(body.error || "Ошибка создания файла", "info");
+        }
+      } else {
+        const errBody = await res.json();
+        showToastMsg(errBody.error || "Ошибка создания файла", "info");
+      }
+    } catch (e: any) {
+      showToastMsg("Возникла сетевая ошибка при сохранении", "info");
+    }
+  };
+
+  const handleDeleteFile = async (filePath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (files.length <= 1) {
+      showToastMsg("Нельзя удалить единственный файл проекта", "info");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/files/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filePath })
+      });
+
+      if (res.ok) {
+        const updated = files.filter(f => f.path !== filePath);
+        setFiles(updated);
+        localStorage.setItem("primix_files", JSON.stringify(updated));
+        
+        if (activeFilePath === filePath) {
+          setActiveFilePath(updated[0].path);
+        }
+        showToastMsg("Файл успешно удален");
+        setTerminalLogs(prev => [
+          ...prev,
+          { text: `[SYSTEM] Deleted file: ${filePath} from disk.`, type: "system" }
+        ]);
+      } else {
+        showToastMsg("Ошибка удаления файла", "info");
+      }
+    } catch (err) {
+      showToastMsg("Ошибка соединения с бэкендом", "info");
+    }
+  };
+
+  const handleStartRename = (file: ProjectFile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingFileId(file.path);
+    setTempRenameName(file.name);
+  };
+
+  const handleSaveRename = async (file: ProjectFile) => {
+    if (!tempRenameName.trim() || tempRenameName.trim() === file.name) {
+      setEditingFileId(null);
+      return;
+    }
+
+    const dirStr = file.path.substring(0, file.path.lastIndexOf("/"));
+    const newFilePath = (dirStr ? dirStr : "") + "/" + tempRenameName.trim();
+
+    try {
+      const res = await fetch("/api/files/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPath: file.path, newPath: newFilePath })
+      });
+
+      if (res.ok) {
+        const updated = files.map(f => {
+          if (f.path === file.path) {
+            return { ...f, name: tempRenameName.trim(), path: newFilePath };
+          }
+          return f;
+        });
+        setFiles(updated);
+        localStorage.setItem("primix_files", JSON.stringify(updated));
+        
+        if (activeFilePath === file.path) {
+          setActiveFilePath(newFilePath);
+        }
+
+        setEditingFileId(null);
+        showToastMsg("Файл успешно переименован");
+        setTerminalLogs(prev => [
+          ...prev,
+          { text: `[SYSTEM] Renamed file: ${file.path} -> ${newFilePath}`, type: "system" }
+        ]);
+      } else {
+        const errBody = await res.json();
+        showToastMsg(errBody.error || "Ошибка переименования", "info");
+      }
+    } catch (err) {
+      showToastMsg("Ошибка соединения с сервером", "info");
+    }
+  };
 
   // Editor states
   const [activeTab, setActiveTab] = useState<"explorer" | "api" | "debugger" | "docs">("explorer");
@@ -179,10 +338,26 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
 
-  // Auto-save files with Real-time Cloud Sync
+  // Auto-save files with Real-time Cloud Sync and Host Disk synchronization
   const saveFilesToStore = async (newFiles: ProjectFile[]) => {
     setFiles(newFiles);
     localStorage.setItem("primix_files", JSON.stringify(newFiles));
+    
+    // Save currently active changed file back to node backend filesystem
+    if (activeFilePath) {
+      const activeF = newFiles.find(f => f.path === activeFilePath);
+      if (activeF) {
+        try {
+          await fetch("/api/files/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filePath: activeFilePath, content: activeF.content })
+          });
+        } catch (err) {
+          console.error("Failed to sync edited file back to backend host disk:", err);
+        }
+      }
+    }
     
     if (user) {
       setIsCloudSyncing(true);
@@ -1181,59 +1356,146 @@ ${activeFile.content}
             <div className="p-4 flex flex-col h-full">
               <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
                 <span className="text-[11px] uppercase tracking-wider font-bold text-gray-400 flex items-center gap-1.5 font-sans">
-                  <Layers className="h-4 w-4 text-blue-500" /> ПРОЕКТНЫЕ КАРКАСЫ
+                  <Layers className="h-4 w-4 text-blue-500" /> ФАЙЛЫ ПРОЕКТА
                 </span>
-                <span className="text-[10px] bg-white/5 text-gray-350 border border-white/5 px-2 py-0.5 rounded-full font-mono font-medium">
-                  {files.length} шабл.
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowNewFileInput(!showNewFileInput)}
+                    title="Новый файл"
+                    className="p-1 hover:bg-white/10 text-gray-450 hover:text-white rounded active:scale-90 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="text-[10px] bg-white/5 text-gray-350 border border-white/5 px-2 py-0.5 rounded-full font-mono font-medium">
+                    {files.length} файлов
+                  </span>
+                </div>
               </div>
 
-              <p className="text-[11px] text-gray-400 mb-4 leading-relaxed font-sans">
-                Выберите платформенный API-скрипт, вспомогательный мобильный HTML или файл автозапуска сервера:
+              <p className="text-[10px] text-gray-400 mb-4 leading-relaxed font-sans">
+                Добавляйте, редактируйте и удаляйте файлы. Изменения сохраняются напрямую в файловую систему проекта:
               </p>
 
-              {/* List of Cupertino Apple-style buttons */}
+              {/* New File Inline Form Input */}
+              {showNewFileInput && (
+                <form onSubmit={handleCreateFileSubmit} className="mb-4 p-2.5 bg-neutral-900 border border-white/5 rounded-xl space-y-2 select-text shrink-0">
+                  <span className="text-[9px] uppercase font-bold text-sky-400 tracking-wider">Создать файл на диске</span>
+                  <input
+                    type="text"
+                    required
+                    value={newFileName}
+                    onChange={e => setNewFileName(e.target.value)}
+                    placeholder="например: view.html или test.pmx"
+                    autoFocus
+                    className="w-full bg-[#121318] border border-white/5 rounded px-2 py-1 text-[11px] text-slate-100 font-mono focus:outline-none focus:border-[#0071e3]"
+                  />
+                  <div className="flex justify-end gap-1.5 select-none text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setShowNewFileInput(false)}
+                      className="px-2 py-0.5 text-slate-400 hover:text-slate-200"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-2.5 py-0.5 bg-[#0071e3] hover:bg-[#005bb5] text-white rounded font-bold"
+                    >
+                      Создать
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* List of files with rename/delete overlays */}
               <div className="flex flex-col gap-2 flex-1 overflow-y-auto pr-1">
-                {files.map(file => (
-                  <button
-                    key={file.path}
-                    onClick={() => handleSelectFile(file)}
-                    className={`flex items-start gap-3 p-3 rounded-xl text-left transition-all duration-150 border ${
-                      activeFilePath === file.path
-                        ? "bg-[#0071e3]/10 border-[#0071e3]/40 shadow-sm shadow-black/10"
-                        : "bg-white/5 border-transparent hover:bg-white/8 hover:border-white/5"
-                    } active:scale-[0.98]`}
-                  >
-                    <div className="mt-0.5 p-1 bg-white/5 rounded-lg shrink-0">
-                      {file.platform === "win7" && <FileCode className="h-3.5 w-3.5 text-sky-400" />}
-                      {file.platform === "win10_11" && <Code className="h-3.5 w-3.5 text-blue-400" />}
-                      {file.platform === "linux" && <Terminal className="h-3.5 w-3.5 text-emerald-400" />}
-                      {file.platform === "macos" && <Layers className="h-3.5 w-3.5 text-[#ff5f56]" />}
-                      {file.platform === "universal" && <Smartphone className="h-3.5 w-3.5 text-purple-400" />}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[11px] font-bold ${activeFilePath === file.path ? "text-[#2f80ed]" : "text-gray-200"}`}>
-                          {file.name}
-                        </span>
-                        <span className="text-[8px] uppercase font-mono border px-1.5 py-0.2 rounded-full text-gray-400 border-white/5 bg-white/5">
-                          {file.platform === "custom" ? "prod" : file.platform}
-                        </span>
+                {files.map(file => {
+                  const isActive = activeFilePath === file.path;
+                  const isEditing = editingFileId === file.path;
+                  return (
+                    <div
+                      key={file.path}
+                      onClick={() => !isEditing && handleSelectFile(file)}
+                      className={`group relative flex items-start gap-2.5 p-2.5 rounded-xl text-left transition-all duration-150 border cursor-pointer select-none ${
+                        isActive
+                          ? "bg-[#0071e3]/10 border-[#0071e3]/45 shadow-sm shadow-black/15"
+                          : "bg-white/5 border-transparent hover:bg-white/8 hover:border-white/5"
+                      }`}
+                    >
+                      <div className="mt-1 p-1 bg-white/5 rounded-lg shrink-0">
+                        {file.platform === "win7" && <FileCode className="h-3.5 w-3.5 text-sky-400" />}
+                        {file.platform === "win10_11" && <Code className="h-3.5 w-3.5 text-blue-400" />}
+                        {file.platform === "linux" && <Terminal className="h-3.5 w-3.5 text-emerald-400" />}
+                        {file.platform === "macos" && <Layers className="h-3.5 w-3.5 text-[#ff5f56]" />}
+                        {file.platform === "universal" && <Smartphone className="h-3.5 w-3.5 text-purple-400" />}
+                        {file.platform === "custom" && <FileText className="h-3.5 w-3.5 text-amber-500" />}
                       </div>
-                      <p className="text-[10px] text-gray-500 truncate mt-0.5 font-sans">
-                        {file.name.endsWith(".bat") && "Скрипт запуска Windows 7 (.bat)"}
-                        {file.name.endsWith(".ps1") && "Скрипт запуска Windows 10/11 (.ps1)"}
-                        {file.name.endsWith(".html") && "iOS / Android мобильный WebView"}
-                        {file.name.endsWith(".js") && "Запуск сервера .pmx (Node.js)"}
-                        {file.platform === "win7" && !file.name.endsWith(".bat") && "Winsock v2, SQLite, classic API"}
-                        {file.platform === "win10_11" && !file.name.endsWith(".ps1") && "TLS 1.3, Async I/O, Telemetries"}
-                        {file.platform === "linux" && "Daemon systemd, UNIX Socket pipe"}
-                        {file.platform === "macos" && "Sandboxed core dispatch, secure"}
-                        {file.platform === "universal" && !file.name.endsWith(".html") && "Docker, WebSocket sync, HTML5 view"}
-                      </p>
+
+                      <div className="flex-1 min-w-0 pr-6">
+                        {isEditing ? (
+                          <div className="space-y-1.5 select-text" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={tempRenameName}
+                              onChange={e => setTempRenameName(e.target.value)}
+                              className="w-full bg-[#121318] border border-white/10 rounded px-1.5 py-0.5 text-[10.5px] font-mono focus:outline-none text-slate-100 focus:border-blue-500"
+                              autoFocus
+                            />
+                            <div className="flex justify-end gap-1 text-[9px]">
+                              <button
+                                onClick={() => setEditingFileId(null)}
+                                className="px-1.5 py-0.5 text-slate-400 hover:text-white"
+                              >
+                                Отмена
+                              </button>
+                              <button
+                                onClick={() => handleSaveRename(file)}
+                                className="px-1.5 py-0.5 bg-blue-600 text-white rounded font-bold"
+                              >
+                                Сохранить
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-[11px] font-bold truncate ${isActive ? "text-[#2f80ed]" : "text-gray-200"}`}>
+                                {file.name}
+                              </span>
+                            </div>
+                            <p className="text-[9px] text-gray-500 truncate font-sans mt-0.5">
+                              {file.name.endsWith(".bat") && "Скрипт Windows (.bat)"}
+                              {file.name.endsWith(".ps1") && "PowerShell (.ps1)"}
+                              {file.name.endsWith(".html") && "Интерфейс WebView (.html)"}
+                              {file.name.endsWith(".js") && "Серверный JS (.js)"}
+                              {file.name.endsWith(".pmx") && "Исходник Primix (.pmx)"}
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Hover Actions */}
+                      {!isEditing && (
+                        <div className="absolute right-2.5 top-2.5 hidden group-hover:flex items-center gap-1 bg-neutral-900/90 p-1 rounded-md border border-white/5 shadow-md">
+                          <button
+                            onClick={(e) => handleStartRename(file, e)}
+                            title="Переименовать"
+                            className="p-1 hover:bg-white/10 text-slate-400 hover:text-sky-450 rounded transition cursor-pointer"
+                          >
+                            <Edit2 className="h-2.5 w-2.5" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteFile(file.path, e)}
+                            title="Удалить файл"
+                            className="p-1 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded transition cursor-pointer"
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Diagnostics summaries */}
@@ -1925,10 +2187,24 @@ ${activeFile.content}
             </div>
 
             <div className="flex items-center gap-2">
+              {activeFile.name.endsWith(".html") && (
+                <button
+                  onClick={() => setShowLivePreview(!showLivePreview)}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all active:scale-95 flex items-center gap-1.5 border border-white/5 cursor-pointer ${
+                    showLivePreview 
+                      ? "bg-[#0071e3] hover:bg-[#005bb5] text-white" 
+                      : "bg-white/5 hover:bg-white/10 text-slate-300"
+                  }`}
+                  title="Включить/отключить разделенный предпросмотр"
+                >
+                  <Smartphone className="h-3 w-3" /> Предпросмотр: {showLivePreview ? "Вкл" : "Выкл"}
+                </button>
+              )}
+
               <button
                 onClick={handleCopyCode}
                 title="Копировать исходный px-код"
-                className="px-3 py-1 bg-white/5 hover:bg-white/10 active:scale-95 text-gray-200 border border-white/5 rounded-full transition-all text-[10px] font-bold flex items-center gap-1"
+                className="px-3 py-1 bg-white/5 hover:bg-white/10 active:scale-95 text-gray-200 border border-white/5 rounded-full transition-all text-[10px] font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Copy className="h-3 w-3 text-[#0071e3]" /> Скопировать PX
               </button>
@@ -1936,14 +2212,14 @@ ${activeFile.content}
               {!vmState.isBooted ? (
                 <button
                   onClick={startDebuggerVM}
-                  className="px-3 py-1 bg-[#34c759] hover:bg-[#30b552] text-white rounded-full text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1"
+                  className="px-3 py-1 bg-[#34c759] hover:bg-[#30b552] text-white rounded-full text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
                 >
                   <Play className="h-3 w-3 fill-current" /> Запустить
                 </button>
               ) : (
                 <button
                   onClick={stopDebuggerVM}
-                  className="px-3 py-1 bg-[#ff3b30] hover:bg-[#e03126] text-white rounded-full text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1"
+                  className="px-3 py-1 bg-[#ff3b30] hover:bg-[#e03126] text-white rounded-full text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
                 >
                   <Square className="h-3 w-3 fill-current" /> Стоп
                 </button>
@@ -1952,31 +2228,98 @@ ${activeFile.content}
           </div>
 
           {/* Core Monaco Editor Frame container */}
-          <div className="flex-1 min-h-0 relative bg-[#1e1e1e]">
-            <MonacoEditor
-              height="100%"
-              language="primix"
-              theme="vs-dark"
-              value={activeFile.content}
-              onChange={handleEditorChange}
-              onMount={handleEditorDidMount}
-              options={{
-                fontSize: 13,
-                fontFamily: "JetBrains Mono, Menlo, Monaco, monospace",
-                minimap: { enabled: true },
-                automaticLayout: true,
-                cursorBlinking: "linear",
-                tabSize: 4,
-                wordWrap: "on",
-                lineNumbers: "on",
-                scrollbar: {
-                  vertical: "visible",
-                  horizontal: "visible"
-                },
-                roundedSelection: true,
-                renderLineHighlight: "all"
-              }}
-            />
+          <div className="flex-1 min-h-0 relative bg-[#1e1e1e] flex flex-row">
+            <div className="h-full min-w-0 flex-1 relative">
+              <MonacoEditor
+                height="100%"
+                language={
+                  activeFile.name.endsWith(".html") ? "html" : 
+                  activeFile.name.endsWith(".js") ? "javascript" : 
+                  activeFile.name.endsWith(".ps1") ? "powershell" : 
+                  activeFile.name.endsWith(".bat") ? "bat" : "primix"
+                }
+                theme="vs-dark"
+                value={activeFile.content}
+                onChange={handleEditorChange}
+                onMount={handleEditorDidMount}
+                options={{
+                  fontSize: 13,
+                  fontFamily: "JetBrains Mono, Menlo, Monaco, monospace",
+                  minimap: { enabled: true },
+                  automaticLayout: true,
+                  cursorBlinking: "linear",
+                  tabSize: 4,
+                  wordWrap: "on",
+                  lineNumbers: "on",
+                  scrollbar: {
+                    vertical: "visible",
+                    horizontal: "visible"
+                  },
+                  roundedSelection: true,
+                  renderLineHighlight: "all"
+                }}
+              />
+            </div>
+
+            {/* Live Web Preview Split Pane (Right) */}
+            {showLivePreview && activeFile.name.endsWith(".html") && (
+              <div className="w-1/2 h-full border-l border-[#111111] bg-[#1a1b20] flex flex-col shrink-0">
+                {/* Header for WebView simulator */}
+                <div className="flex items-center justify-between px-3 h-8 bg-[#161617] border-b border-white/5 text-[10px] select-none text-slate-400">
+                  <span className="font-semibold text-sky-400 animate-pulse flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-450 animate-pulse"></span> ИНТЕГРИРОВАННЫЙ ЖИВОЙ ПРЕДПРОСМОТР (LIVE VIEW)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const iframe = document.getElementById("simulated-browser-iframe") as HTMLIFrameElement;
+                        if (iframe) {
+                          iframe.srcdoc = activeFile.content;
+                        }
+                      }}
+                      className="hover:text-white flex items-center gap-1 bg-white/5 border border-white/5 hover:bg-white/10 px-1.5 py-0.5 rounded transition cursor-pointer"
+                      title="Перегрузить WebView"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Обновить
+                    </button>
+                    <a
+                      href={`/${activeFile.name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-white flex items-center gap-1 bg-sky-500/10 border border-sky-500/30 hover:bg-sky-500/20 text-sky-450 px-1.5 py-0.5 rounded transition cursor-pointer"
+                      title="Открыть HTML в отдельной вкладке без IDE"
+                    >
+                      В новой вкладке <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Simulated URL Bar */}
+                <div className="bg-[#1f2026] p-2 border-b border-[#111111] flex items-center gap-2">
+                  <div className="flex gap-1.5 shrink-0 select-none">
+                    <span className="w-2 h-2 rounded-full bg-rose-500/80"></span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500/80"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500/80"></span>
+                  </div>
+                  <div className="flex-1 bg-[#121318] text-slate-400 rounded-full py-0.5 px-3 text-[10px] font-mono border border-white/5 flex items-center justify-between truncate select-all">
+                    <span>http://localhost:3000/{activeFile.name}</span>
+                    <span className="text-[8px] bg-[#0071e3]/25 px-1.5 py-0.2 rounded text-blue-300 border border-blue-500/20 uppercase font-bold tracking-wider select-none shrink-0 scale-90">SSL Secure</span>
+                  </div>
+                </div>
+
+                {/* Dynamic srcDoc Frame Sandbox */}
+                <div className="flex-1 bg-white relative">
+                  <iframe
+                    id="simulated-browser-iframe"
+                    title="Live HTML Web Preview"
+                    srcDoc={activeFile.content}
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-scripts"
+                    className="w-full h-full border-none"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="h-64 border-t border-[#111111] bg-[#1e1e1e] flex flex-col">
             <div className="flex items-center justify-between px-3 h-8 bg-[#2d2d2d] border-b border-[#111111] text-[11px]">
