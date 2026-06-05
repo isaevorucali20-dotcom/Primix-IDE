@@ -455,6 +455,218 @@ app.post("/api/gemini/chat", async (req, res) => {
   }
 });
 
+// =====================================================================
+// Shared VM State Simulator inside Express memory (Real-time Sync)
+// =====================================================================
+interface SimulatedVM {
+  isBooted: boolean;
+  port: number;
+  activeFilePath: string;
+  tables: Array<{ name: string; columns: string[] }>;
+  routes: Array<{ path: string; welcome: string }>;
+  bridges: Array<{ client: string; protocol: string }>;
+  watches: Array<{ variable: string; action: string }>;
+  variables: Record<string, string>;
+  logs: Array<{ timestamp: string; type: "info" | "success" | "error"; message: string }>;
+  dbData: Record<string, Array<Record<string, string>>>;
+}
+
+let sharedVMState: SimulatedVM = {
+  isBooted: false,
+  port: 8080,
+  activeFilePath: "/win10_11_modern.pmx",
+  tables: [],
+  routes: [],
+  bridges: [],
+  watches: [],
+  variables: {},
+  logs: [
+    { timestamp: new Date().toLocaleTimeString(), type: "info", message: "Инициализация локальной среды Primix Daemon..." }
+  ],
+  dbData: {}
+};
+
+// Endpoints for Shared VM Management
+app.get("/api/vm/state", (req, res) => {
+  res.json(sharedVMState);
+});
+
+app.post("/api/vm/start", (req, res) => {
+  try {
+    let { filePath, content } = req.body;
+    
+    if (!filePath) {
+      filePath = sharedVMState.activeFilePath;
+    }
+
+    if (!content) {
+      // Load content from file path
+      const safePath = path.join(process.cwd(), filePath.replace(/^\//, ""));
+      if (fs.existsSync(safePath)) {
+        content = fs.readFileSync(safePath, "utf-8");
+      } else {
+        // Fallback to searching first .pmx file
+        const workspace = getWorkspaceFiles();
+        const primaryPmx = workspace.find(f => f.name.endsWith(".pmx"));
+        if (primaryPmx) {
+          filePath = primaryPmx.path;
+          content = primaryPmx.content;
+        } else {
+          return res.status(400).json({ error: "No PMX file found to execute" });
+        }
+      }
+    }
+
+    // Save active filepath
+    sharedVMState.activeFilePath = filePath;
+
+    // Parse PMX content
+    const parsed = parsePmxContent(content);
+    const parsedPort = parseInt(parsed.port) || 8080;
+
+    // Build lists
+    const initialLogs = [
+      { timestamp: new Date().toLocaleTimeString(), type: "info" as const, message: `🚀 [PRIMIX DAEMON] Спектральная виртуальная машина запущена на порту ${parsedPort}!` },
+      { timestamp: new Date().toLocaleTimeString(), type: "success" as const, message: `📂 Загружен файл конфигурации: ${filePath}` }
+    ];
+
+    parsed.tables.forEach(t => {
+      initialLogs.push({
+        timestamp: new Date().toLocaleTimeString(),
+        type: "success" as const,
+        message: `🗄️ Хранилище: Инициализировано табличное дисковое пространство '${t.name}' (${t.cols.join(", ")})`
+      });
+    });
+
+    parsed.bridges.forEach(b => {
+      initialLogs.push({
+        timestamp: new Date().toLocaleTimeString(),
+        type: "info" as const,
+        message: `🔌 Мост: Сетевой адаптер '${b.client}' зарегистрирован по протоколу [${b.protocol}]`
+      });
+    });
+
+    parsed.watches.forEach(w => {
+      initialLogs.push({
+        timestamp: new Date().toLocaleTimeString(),
+        type: "info" as const,
+        message: `👁️ Сенсор: Установлен триггер перехвата '${w.variable}' => [${w.action}]`
+      });
+    });
+
+    // Seed dummy initial variables
+    const initialVars: Record<string, string> = {};
+    parsed.watches.forEach(w => {
+      initialVars[w.variable] = "0";
+    });
+
+    // Populate state
+    sharedVMState.isBooted = true;
+    sharedVMState.port = parsedPort;
+    sharedVMState.tables = parsed.tables.map(t => ({ name: t.name, columns: t.cols }));
+    sharedVMState.routes = parsed.routes;
+    sharedVMState.bridges = parsed.bridges;
+    sharedVMState.watches = parsed.watches;
+    sharedVMState.variables = initialVars;
+    sharedVMState.logs = initialLogs;
+    sharedVMState.dbData = {};
+
+    // Put initial template data if table users or any exists
+    parsed.tables.forEach(t => {
+      sharedVMState.dbData[t.name] = [];
+    });
+
+    res.json({ success: true, state: sharedVMState });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/vm/stop", (req, res) => {
+  sharedVMState.isBooted = false;
+  sharedVMState.logs.push({
+    timestamp: new Date().toLocaleTimeString(),
+    type: "info",
+    message: "🛑 [PRIMIX DAEMON] Виртуальная машина Primix остановлена пользователем."
+  });
+  res.json({ success: true, state: sharedVMState });
+});
+
+app.post("/api/vm/db/insert", (req, res) => {
+  try {
+    const { tableName, rowData } = req.body;
+    if (!tableName || !rowData) {
+      return res.status(400).json({ error: "Missing tableName or rowData" });
+    }
+
+    if (!sharedVMState.dbData[tableName]) {
+      sharedVMState.dbData[tableName] = [];
+    }
+
+    sharedVMState.dbData[tableName].push(rowData);
+    sharedVMState.logs.push({
+      timestamp: new Date().toLocaleTimeString(),
+      type: "success",
+      message: `💾 [SQL INSERT] В таблицу '${tableName}' успешно добавлена запись: ${JSON.stringify(rowData)}`
+    });
+
+    // Check watches - if any variable changed, trigger its reaction
+    for (const [key, val] of Object.entries(rowData)) {
+      const activeWatch = sharedVMState.watches.find(w => w.variable === key);
+      if (activeWatch) {
+        sharedVMState.logs.push({
+          timestamp: new Date().toLocaleTimeString(),
+          type: "info",
+          message: `🎯 [REACTIVE WATCH TRIGGER] Переменная '${key}' была обновлена до значения '${val}'. Системный вызов: ${activeWatch.action}!`
+        });
+      }
+    }
+
+    res.json({ success: true, dbData: sharedVMState.dbData[tableName], logs: sharedVMState.logs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/vm/variables/update", (req, res) => {
+  try {
+    const { key, value } = req.body;
+    if (!key) return res.status(400).json({ error: "Missing key" });
+
+    sharedVMState.variables[key] = value.toString();
+    
+    sharedVMState.logs.push({
+      timestamp: new Date().toLocaleTimeString(),
+      type: "info",
+      message: `🔧 [REGISTRY UPDATE] Значение параметра '${key}' принудительно изменено на: ${value}`
+    });
+
+    const activeWatch = sharedVMState.watches.find(w => w.variable === key);
+    if (activeWatch) {
+      sharedVMState.logs.push({
+        timestamp: new Date().toLocaleTimeString(),
+        type: "success",
+        message: `🎯 [REACTIVE WATCH TRIGGER] Фильтр '${key}' перехвачен. Вызов обработчика: ${activeWatch.action}`
+      });
+    }
+
+    res.json({ success: true, variables: sharedVMState.variables });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/vm/logs", (req, res) => {
+  res.json({ logs: sharedVMState.logs });
+});
+
+app.post("/api/vm/logs/clear", (req, res) => {
+  sharedVMState.logs = [
+    { timestamp: new Date().toLocaleTimeString(), type: "info", message: "Логи виртуальной машины очищены пользователем." }
+  ];
+  res.json({ success: true, logs: sharedVMState.logs });
+});
+
 // File Sync & Manipulation Endpoints
 app.get("/api/files", (req, res) => {
   try {

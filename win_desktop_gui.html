@@ -142,29 +142,51 @@
     <!-- LEFT SIDE COLUMN: Controls, Range Sliders, and Databases (colspan: 5) -->
     <section class="lg:col-span-5 flex flex-col gap-4">
       
-      <!-- Panel 1: Network & Connection Core Settings -->
+      <!-- Panel 1: Network & Connection Core Settings with Daemon Control -->
       <div class="acrylic-glass rounded-xl p-5 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Сетевой Шлюз (Winsock Router)</h2>
-          <span class="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+          <h2 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Сетевой Шлюз (Winsock Router / Daemon)</h2>
+          <span id="daemon_status_dot" class="h-2 w-2 rounded-full bg-slate-500"></span>
         </div>
         
-        <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="grid grid-cols-2 gap-3 text-xs mb-2">
           <div class="bg-white/5 p-2.5 rounded-lg border border-white/5">
             <span class="text-[9px] text-slate-500 uppercase font-semibold">Адрес хоста</span>
-            <div class="font-mono text-cyan-400 font-bold mt-0.5">127.0.0.1:3000</div>
+            <div id="daemon_active_port" class="font-mono text-cyan-400 font-bold mt-0.5">OFFLINE</div>
           </div>
           <div class="bg-white/5 p-2.5 rounded-lg border border-white/5">
             <span class="text-[9px] text-slate-500 uppercase font-semibold">Состояние моста</span>
-            <div class="font-semibold text-emerald-400 mt-0.5">CONNECTED</div>
+            <div id="daemon_status_text" class="font-semibold text-amber-500 mt-0.5">DAEMON INACTIVE</div>
           </div>
+        </div>
+
+        <!-- Interactive Script & Start/Stop Controls -->
+        <div class="bg-[#121318]/50 p-3 rounded-lg border border-white/5 space-y-3">
+          <div class="space-y-1">
+            <label class="text-[10px] text-slate-400 font-semibold block">Активный PMX Скрипт:</label>
+            <select 
+              id="pmx_file_select" 
+              class="w-full bg-[#1c1d24] border border-white/10 rounded px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-[#0078d4] font-mono cursor-pointer"
+              onchange="pollVMState()"
+            >
+              <option value="/win10_11_modern.pmx">win10_11_modern.pmx</option>
+              <option value="/universal_android_cloud.pmx">universal_android_cloud.pmx</option>
+            </select>
+          </div>
+          <button 
+            id="daemon_action_btn" 
+            onclick="startDaemon()"
+            class="win-accent-button w-full py-2 rounded text-xs text-white font-bold transition uppercase tracking-wider cursor-pointer"
+          >
+            Запустить Daemon
+          </button>
         </div>
       </div>
 
       <!-- Panel 2: Interactive Property Registers (Sliders) -->
       <div class="acrylic-glass rounded-xl p-5 space-y-4">
-        <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Реестры и Флуктуации (Interactive Registers)</h3>
-        <p class="text-[10px] text-slate-400 leading-snug">Изменяйте ползунки, чтобы симулировать динамическую нагрузку в реальном времени:</p>
+        <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Реестры и Флуктуации (Server-side Registers)</h3>
+        <p class="text-[10px] text-slate-400 leading-snug">Изменяйте ползунки, чтобы симулировать динамическую нагрузку и запускать триггеры (watch) на бэкенде в реальном времени:</p>
         
         <div class="space-y-3.5">
           <!-- Slider 1 -->
@@ -187,7 +209,7 @@
           <!-- Slider 2 -->
           <div class="space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
             <div class="flex justify-between items-center text-[10px]">
-              <span class="font-mono text-slate-300">memory_payload (MB)</span>
+              <span class="font-mono text-slate-300">memory_usage (MB/%)</span>
               <span id="mem_val" class="font-mono font-bold text-emerald-400">76</span>
             </div>
             <input 
@@ -204,7 +226,7 @@
           <!-- Slider 3 -->
           <div class="space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
             <div class="flex justify-between items-center text-[10px]">
-              <span class="font-mono text-slate-300">network_payload (KB/s)</span>
+              <span class="font-mono text-slate-300">network_payload / user_interaction</span>
               <span id="net_val" class="font-mono font-bold text-orange-400">110</span>
             </div>
             <input 
@@ -224,32 +246,26 @@
       <div class="acrylic-glass rounded-xl p-5 space-y-3">
         <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Эмулятор Таблицы СУБД (Relational Database)</h3>
         
-        <!-- Input Row Items Block -->
-        <form onsubmit="addTableRow(event)" class="grid grid-cols-3 gap-1.5">
-          <input 
-            type="text" 
-            id="db_device_id" 
-            placeholder="node_id" 
-            required
-            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
+        <!-- Table Dropdown Selector -->
+        <div class="space-y-1">
+          <label class="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Выберите целевую таблицу:</label>
+          <select 
+            id="db_table_select" 
+            class="w-full bg-[#1c1d24] border border-white/10 rounded px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-winAccent font-mono cursor-pointer"
+            onchange="updateDbInputs()"
           >
-          <input 
-            type="text" 
-            id="db_sync_key" 
-            placeholder="ключ" 
-            required
-            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
-          >
-          <input 
-            type="text" 
-            id="db_sync_val" 
-            placeholder="значение" 
-            required
-            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
-          >
+            <option value="">(Запустите Daemon)</option>
+          </select>
+        </div>
+
+        <!-- Input Row Items Block (Generated Dynamically) -->
+        <form onsubmit="addTableRow(event)" class="space-y-2">
+          <div id="db_fields_container" class="grid grid-cols-2 gap-2">
+            <p class="text-[9px] text-slate-500 italic col-span-2">Включите Daemon сервер для генерации полей базы данных.</p>
+          </div>
           <button 
             type="submit" 
-            class="win-accent-button col-span-3 py-1.5 rounded text-[10px] font-bold text-white uppercase tracking-wider"
+            class="win-accent-button w-full py-2 rounded text-[10px] font-bold text-white uppercase tracking-wider cursor-pointer"
           >
             📎 Добавить кортеж в СУБД
           </button>
@@ -260,21 +276,14 @@
           <table class="w-full text-left text-[9px] font-mono border-collapse">
             <thead>
               <tr class="bg-white/5 border-b border-white/10 text-slate-400">
-                <th class="p-1 px-2">device_id</th>
-                <th class="p-1 px-2">sync_key</th>
-                <th class="p-1 px-2">sync_val</th>
+                <th class="p-1 px-2">Таблица</th>
+                <th class="p-1 px-2">Данные кортежа (Ключ/Значение)</th>
               </tr>
             </thead>
             <tbody id="dbTableBody">
               <tr class="border-b border-white/5 hover:bg-white/5">
-                <td class="p-1 px-2 text-slate-300">NODE_001</td>
-                <td class="p-1 px-2 text-slate-400">auth_level</td>
-                <td class="p-1 px-2 text-cyan-400">ADMIN</td>
-              </tr>
-              <tr class="border-b border-white/5 hover:bg-white/5">
-                <td class="p-1 px-2 text-slate-300">NODE_002</td>
-                <td class="p-1 px-2 text-slate-400">system_ping</td>
-                <td class="p-1 px-2 text-emerald-400">22ms</td>
+                <td class="p-1 px-2 text-cyan-400 font-bold">users</td>
+                <td class="p-1 px-2 text-slate-300">id: 1, username: admin, access_level: 3</td>
               </tr>
             </tbody>
           </table>
@@ -350,52 +359,265 @@
 
   <!-- Interactive Dashboard scripts -->
   <script>
-    // In-memory logs
+    // In-memory logs & state references
     const logsEl = document.getElementById('winLogs');
+    let vmState = {
+      isBooted: false,
+      port: 8080,
+      activeFilePath: '/win10_11_modern.pmx',
+      tables: [],
+      routes: [],
+      bridges: [],
+      watches: [],
+      variables: {},
+      logs: []
+    };
+
     function appendLog(msg, colorClass = 'text-slate-400') {
       const time = new Date().toLocaleTimeString();
       const div = document.createElement('div');
+      div.className = 'py-0.5 border-b border-white/5 last:border-0';
       div.innerHTML = '<span class="text-slate-500">[' + time + ']</span> <span class="' + colorClass + '">' + msg + '</span>';
       logsEl.appendChild(div);
       logsEl.scrollTop = logsEl.scrollHeight;
     }
 
-    // Interactive slider changes
-    function updateVal(type, val) {
-      if (type === 'cpu') {
-        document.getElementById('cpu_val').innerText = val;
-        appendLog('Датчик нагрузки: cpu_usage изменен => ' + val + '%', 'text-sky-300');
+    // Load available files with .pmx extension to populate select dropdown
+    async function loadPmxFiles() {
+      try {
+        const res = await fetch('/api/files');
+        if (res.ok) {
+          const files = await res.json();
+          const pmxFiles = files.filter(f => f.name.endsWith('.pmx'));
+          const select = document.getElementById('pmx_file_select');
+          if (select) {
+            select.innerHTML = pmxFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
+            // Set active if matched
+            if (vmState && vmState.activeFilePath) {
+              select.value = vmState.activeFilePath;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load workspace files:", err);
       }
-      if (type === 'mem') {
-        document.getElementById('mem_val').innerText = val;
-        appendLog('Регистр памяти: memory_payload изменен => ' + val + ' MB', 'text-emerald-300');
-      }
-      if (type === 'net') {
-        document.getElementById('net_val').innerText = val;
-        appendLog('Адаптер сети: network_payload изменен => ' + val + ' KB/s', 'text-orange-300');
-      }
-      pushChartData();
     }
 
-    // Dynamic database forms
-    function addTableRow(e) {
+    // Start Daemon
+    async function startDaemon() {
+      const select = document.getElementById('pmx_file_select');
+      const filePath = select ? select.value : '/win10_11_modern.pmx';
+      try {
+        const res = await fetch('/api/vm/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath })
+        });
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success) {
+            appendLog('📡 [WINDOWS SHELL] Запрос на запуск демона ' + filePath + ' выполнен!', 'text-[#34c759] font-bold');
+            pollVMState(true);
+          }
+        }
+      } catch (err) {
+        appendLog('❌ Ошибка запуска демона в операционной системе', 'text-rose-500');
+      }
+    }
+
+    // Stop Daemon
+    async function stopDaemon() {
+      try {
+        const res = await fetch('/api/vm/stop', { method: 'POST' });
+        if (res.ok) {
+          appendLog('🛑 [WINDOWS SHELL] Служба Daemon успешно деактивирована.', 'text-rose-400 font-bold');
+          pollVMState(true);
+        }
+      } catch (err) {
+        appendLog('❌ Ошибка связи с локальной службой', 'text-rose-500');
+      }
+    }
+
+    // Render server logs
+    function renderLogsFeed(logs) {
+      if (!logs || logs.length === 0) return;
+      logsEl.innerHTML = '';
+      logs.forEach(log => {
+        const div = document.createElement('div');
+        div.className = 'py-0.5 border-b border-white/5 last:border-0';
+        let color = 'text-slate-350';
+        if (log.type === 'success') color = 'text-emerald-400 font-medium';
+        if (log.type === 'error') color = 'text-rose-400 font-bold';
+        if (log.type === 'info') color = 'text-sky-400';
+        
+        div.innerHTML = `<span class="text-slate-500 font-mono">[${log.timestamp || '00:00:00'}]</span> <span class="${color}">${log.message}</span>`;
+        logsEl.appendChild(div);
+      });
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    // Poll current server-side state
+    async function pollVMState(forceRebuild = false) {
+      try {
+        const res = await fetch('/api/vm/state');
+        if (res.ok) {
+          const state = await res.json();
+          const changedBoot = vmState.isBooted !== state.isBooted || forceRebuild;
+          vmState = state;
+          
+          // Update Statuses UI
+          const stateDot = document.getElementById('daemon_status_dot');
+          const stateTxt = document.getElementById('daemon_status_text');
+          const toggleBtn = document.getElementById('daemon_action_btn');
+          const activePortText = document.getElementById('daemon_active_port');
+
+          if (state.isBooted) {
+            if (stateDot) stateDot.className = 'h-2 w-2 rounded-full bg-emerald-500 animate-pulse';
+            if (stateTxt) {
+              stateTxt.innerText = 'DAEMON ACTIVE';
+              stateTxt.className = 'font-semibold text-emerald-400 mt-0.5';
+            }
+            if (activePortText) activePortText.innerText = '127.0.0.1:' + state.port;
+            if (toggleBtn) {
+              toggleBtn.innerText = 'Остановить Daemon';
+              toggleBtn.className = 'win-button text-xs py-1.5 px-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold border border-red-500/30 rounded transition cursor-pointer w-full';
+              toggleBtn.onclick = stopDaemon;
+            }
+          } else {
+            if (stateDot) stateDot.className = 'h-2 w-2 rounded-full bg-slate-500';
+            if (stateTxt) {
+              stateTxt.innerText = 'DAEMON INACTIVE';
+              stateTxt.className = 'font-semibold text-amber-500 mt-0.5';
+            }
+            if (activePortText) activePortText.innerText = 'OFFLINE';
+            if (toggleBtn) {
+              toggleBtn.innerText = 'Запустить Daemon';
+              toggleBtn.className = 'win-accent-button text-xs py-1.5 px-3 rounded text-white font-bold transition cursor-pointer w-full';
+              toggleBtn.onclick = startDaemon;
+            }
+          }
+
+          // Populate Dynamic Database table dropdown select
+          const tableSel = document.getElementById('db_table_select');
+          if (tableSel && (changedBoot || tableSel.children.length <= 1)) {
+            if (state.tables && state.tables.length > 0) {
+              tableSel.innerHTML = state.tables.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+              updateDbInputs();
+            } else {
+              tableSel.innerHTML = '<option value="">Нет таблиц</option>';
+              updateDbInputs();
+            }
+          }
+
+          // Render active logs
+          renderLogsFeed(state.logs);
+        }
+      } catch (err) {
+        console.error('Polling state failed:', err);
+      }
+    }
+
+    // Dynamically spawn inputs based on selected table columns in SQLite Emulator
+    function updateDbInputs() {
+      const tableSel = document.getElementById('db_table_select');
+      const container = document.getElementById('db_fields_container');
+      if (!tableSel || !container) return;
+
+      const tblName = tableSel.value;
+      const targetTable = vmState.tables.find(t => t.name === tblName);
+      if (!targetTable) {
+        container.innerHTML = '<p class="text-[9px] text-slate-500 italic col-span-2 text-center p-2">Сначала запустите демона, чтобы инициализировать таблицы БД.</p>';
+        return;
+      }
+
+      container.innerHTML = targetTable.columns.map(col => `
+        <div class="space-y-1">
+          <label class="text-[9px] text-slate-400 block font-mono font-bold">${col}:</label>
+          <input 
+            type="text" 
+            data-column="${col}" 
+            placeholder="${col}" 
+            required
+            class="w-full px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono text-slate-100 placeholder-slate-600"
+          >
+        </div>
+      `).join('');
+    }
+
+    // Submit SQL Row to backend
+    async function addTableRow(e) {
       e.preventDefault();
-      const dev = document.getElementById('db_device_id').value;
-      const key = document.getElementById('db_sync_key').value;
-      const val = document.getElementById('db_sync_val').value;
-      
+      const tableSel = document.getElementById('db_table_select');
+      if (!tableSel || !tableSel.value) return;
+
+      const tblName = tableSel.value;
+      const inputs = document.querySelectorAll('#db_fields_container input');
+      const rowData = {};
+      inputs.forEach(input => {
+        const col = input.getAttribute('data-column');
+        rowData[col] = input.value;
+      });
+
+      try {
+        const res = await fetch('/api/vm/db/insert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableName: tblName, rowData })
+        });
+        if (res.ok) {
+          appendLog('💾 [DB SQL INSERT] Запись успешно добавлена в таблицу ' + tblName, 'text-[#a24de3] font-bold');
+          
+          // Add to local visual table list
+          renderLocalDbTable(tblName, rowData);
+          
+          // Clear inputs
+          inputs.forEach(input => input.value = '');
+          pollVMState();
+        }
+      } catch (err) {
+        appendLog('❌ Ошибка трансляции SQL-кортежа', 'text-rose-500');
+      }
+    }
+
+    function renderLocalDbTable(tblName, rowData) {
       const tbody = document.getElementById('dbTableBody');
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/5 hover:bg-white/5';
-      tr.innerHTML = '<td class="p-1 px-2 text-slate-300">' + dev + '</td><td class="p-1 px-2 text-slate-400">' + key + '</td><td class="p-1 px-2 text-cyan-400">' + val + '</td>';
+      
+      let cells = `<td class="p-1 px-2 text-[#0078d4] font-bold">${tblName}</td>`;
+      const values = Object.entries(rowData).map(([k, v]) => `${k}:${v}`).join(', ');
+      cells += `<td class="p-1 px-2 text-slate-300 truncate font-mono max-w-[200px]" title="${values}">${values}</td>`;
+      
+      tr.innerHTML = cells;
+      
+      if (tbody.children.length > 5) {
+        tbody.removeChild(tbody.firstChild);
+      }
       tbody.appendChild(tr);
-      
-      appendLog('💾 [DB WRITE] SQL-запрос INSERT зафиксирован в секции: ' + dev, 'text-purple-300');
-      
-      // Clear inputs
-      document.getElementById('db_device_id').value = '';
-      document.getElementById('db_sync_key').value = '';
-      document.getElementById('db_sync_val').value = '';
+    }
+
+    // Interactive slider changes (push to server simulated registry!)
+    async function updateVal(type, val) {
+      if (type === 'cpu') {
+        document.getElementById('cpu_val').innerText = val;
+      }
+      if (type === 'mem') {
+        document.getElementById('mem_val').innerText = val;
+      }
+      if (type === 'net') {
+        document.getElementById('net_val').innerText = val;
+      }
+      pushChartData();
+
+      // Submit variable value to server registry
+      try {
+        const key = type === 'cpu' ? 'cpu_usage' : type === 'mem' ? 'memory_usage' : 'network_payload';
+        fetch('/api/vm/variables/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: val })
+        });
+      } catch (e) {}
     }
 
     // Real-time plotting coordinates array
@@ -429,8 +651,6 @@
       
       for(let i=0; i<history.length; i++) {
         const x = i * widthStep;
-        
-        // Map 0-150 range onto the 160px height of SVG (leaving 10px padding top and bottom)
         const scaleVal = (val, max) => 150 - (val / max) * 130;
         
         const cpuY = scaleVal(history[i].cpu, 100);
@@ -461,15 +681,14 @@
         clearInterval(autoPilotInterval);
         autoPilotInterval = null;
         btn.innerText = '⚡ Стример: ВЫКЛ';
-        btn.className = 'win-button px-3 py-1 bg-white/5 text-[9px] font-bold text-slate-300 hover:text-white rounded border border-white/10';
+        btn.className = 'win-button px-3 py-1 bg-white/5 text-[9px] font-bold text-slate-300 hover:text-white rounded border border-white/10 cursor-pointer';
         appendLog('Стример деактивирован. Запись флуктуаций приостановлена.', 'text-slate-500');
       } else {
         btn.innerText = '🔥 Стример: АКТИВЕН';
-        btn.className = 'win-accent-button px-3 py-1 text-[9px] font-bold text-white rounded animate-pulse';
+        btn.className = 'win-accent-button px-3 py-1 text-[9px] font-bold text-white rounded animate-pulse cursor-pointer';
         appendLog('Стример активирован. Генерация непрерывного потока telemetry...', 'text-sky-300');
         
         autoPilotInterval = setInterval(() => {
-          // Jitter sliders
           const cpuS = document.getElementById('cpu_slider');
           const memS = document.getElementById('mem_slider');
           const netS = document.getElementById('net_slider');
@@ -483,16 +702,41 @@
           document.getElementById('net_val').innerText = netS.value;
           
           pushChartData();
-        }, 800);
+
+          // Push active jitter telemetry variables
+          try {
+            fetch('/api/vm/variables/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: 'cpu_usage', value: cpuS.value })
+            });
+            fetch('/api/vm/variables/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: 'memory_usage', value: memS.value })
+            });
+          } catch(e){}
+
+        }, 1200);
       }
     }
 
     function clearConsoleLog() {
-      logsEl.innerHTML = '<div><span class="text-slate-500">[' + new Date().toLocaleTimeString() + ']</span> <span class="text-slate-500 italic">Логи очищены.</span></div>';
+      fetch('/api/vm/logs/clear', { method: 'POST' })
+        .then(() => {
+          logsEl.innerHTML = '<div><span class="text-slate-500">[' + new Date().toLocaleTimeString() + ']</span> <span class="text-slate-500 italic">Логи виртуальной машины очищены.</span></div>';
+        });
     }
 
-    // Draw initial empty state paths
-    pushChartData();
+    // Startup Init
+    window.addEventListener('DOMContentLoaded', () => {
+      loadPmxFiles();
+      pollVMState();
+      pushChartData();
+      
+      // Auto-poll logs and VM status every 1.5 seconds
+      setInterval(() => pollVMState(), 1500);
+    });
   </script>
 
 </body>

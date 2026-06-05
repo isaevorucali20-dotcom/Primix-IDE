@@ -61,7 +61,7 @@
       <div class="w-2.5 h-2.5 bg-blue-500 rounded-full animate-ping"></div>
       <span class="text-xs font-semibold tracking-tight text-gray-800">Primix Cocoa Bridge</span>
     </div>
-    <div class="px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase bg-blue-100 text-blue-600 rounded-full">
+    <div class="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full font-sans font-medium">
       iOS / Android Active
     </div>
   </header>
@@ -78,35 +78,72 @@
       <div class="grid grid-cols-2 gap-3 mt-4">
         <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
           <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Сетевой Порт</span>
-          <p class="text-sm font-bold text-blue-500 font-mono mt-0.5">ws://127.0.0.1:3001</p>
+          <p id="bridge_port_text" class="text-sm font-bold text-blue-500 font-mono mt-0.5">OFFLINE</p>
         </div>
         <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
           <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Состояние Моста</span>
-          <p id="bridgeStatus" class="text-sm font-bold text-emerald-500 mt-0.5 font-sans">READY</p>
+          <p id="bridgeStatus" class="text-sm font-bold text-amber-500 mt-0.5 font-sans">DAEMON OFFLINE</p>
         </div>
       </div>
     </section>
 
-    <!-- Request Sender Section -->
+    <!-- Server Daemon Control Section -->
     <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm space-y-4">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Симуляция Мобильного Вызова</h3>
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Управление Демоном Primix</h3>
+        <span id="daemon_status_badge" class="px-2 py-0.5 text-[9px] font-bold uppercase rounded-full bg-gray-200 text-gray-700">
+          INACTIVE
+        </span>
+      </div>
+
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label class="text-[11px] font-semibold text-gray-500">Системная конфигурация PMX:</label>
+          <select 
+            id="pmx_file_select_mobile" 
+            class="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono cursor-pointer"
+            onchange="pollVMState()"
+          >
+            <option value="/universal_android_cloud.pmx">universal_android_cloud.pmx</option>
+            <option value="/win10_11_modern.pmx">win10_11_modern.pmx</option>
+          </select>
+        </div>
+
+        <button 
+          id="daemon_action_btn" 
+          onclick="toggleDaemonState()" 
+          class="ios-button w-full py-3 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-xl shadow-md cursor-pointer"
+        >
+          Запустить Primix Daemon
+        </button>
+      </div>
+    </section>
+
+    <!-- Request Sender Section with Dynamic Columns Select -->
+    <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm space-y-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Симуляция Мобильного Вызова (SQL INSERT)</h3>
       
       <div class="space-y-3">
-        <!-- Text Message Input -->
         <div class="space-y-1">
-          <label class="text-[11px] font-semibold text-gray-400">Передать данные по REST-мосту:</label>
-          <input 
-            type="text" 
-            id="syncPayload" 
-            value="Device_iOS_Apple_Silicon" 
-            class="w-full px-3 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 transition duration-150"
+          <label class="text-[10px] font-semibold text-gray-400">Целевая таблица СУБД:</label>
+          <select 
+            id="mobile_db_table" 
+            onchange="updateMobileFields()"
+            class="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans cursor-pointer"
           >
+            <option value="">Выберите таблицу</option>
+          </select>
+        </div>
+
+        <!-- Text Message Input (Dynamically Spawned) -->
+        <div id="mobile_fields_container" class="space-y-2.5">
+          <p class="text-xs text-gray-400 italic">Сначала запустите демона, чтобы активировать поля СУБД.</p>
         </div>
 
         <!-- Cupertino style blue action submit button -->
         <button 
           onclick="sendMobilePayload()" 
-          class="ios-button w-full py-3 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-xl shadow-md shadow-blue-500/10"
+          class="ios-button w-full py-3 text-xs font-bold text-white bg-[#0071e3] hover:bg-[#005bb5] rounded-xl shadow-md shadow-blue-500/10 cursor-pointer"
         >
           Отправить в Primix VM
         </button>
@@ -117,7 +154,7 @@
     <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Поток Интеграционных Логов</h3>
-        <button onclick="clearLogs()" class="text-[10px] text-blue-500 hover:underline">Очистить</button>
+        <button onclick="clearLogs()" class="text-[10px] text-blue-500 hover:underline cursor-pointer">Очистить лог</button>
       </div>
 
       <!-- Logs Shell stack -->
@@ -129,36 +166,228 @@
   </main>
 
   <script>
+    let vmState = {
+      isBooted: false,
+      port: 8080,
+      activeFilePath: '/universal_android_cloud.pmx',
+      tables: [],
+      routes: [],
+      bridges: [],
+      watches: [],
+      variables: {},
+      logs: []
+    };
+
+    const parent = document.getElementById('logStack');
+
     function addLog(text, type='info') {
-      const parent = document.getElementById('logStack');
-      if (parent.querySelector('.italic')) parent.innerHTML = '';
-      
       const val = document.createElement('div');
       const time = new Date().toLocaleTimeString();
-      let colorClass = 'text-slate-300';
-      if (type === 'success') colorClass = 'text-[#27c93f]';
-      if (type === 'error') colorClass = 'text-[#ff5f56]';
+      let colorClass = 'text-slate-350';
+      if (type === 'success') colorClass = 'text-[#34c759] font-medium';
+      if (type === 'error') colorClass = 'text-[#ff3b30] font-bold';
+      if (type === 'info') colorClass = 'text-[#0071e3]';
       
-      val.innerHTML = '<span class="text-gray-500">[' + time + ']</span> <span class="' + colorClass + '">' + text + '</span>';
+      val.innerHTML = '<span class="text-gray-500 font-mono">[' + time + ']</span> <span class="' + colorClass + '">' + text + '</span>';
       parent.appendChild(val);
       parent.scrollTop = parent.scrollHeight;
     }
 
-    function sendMobilePayload() {
-      const val = document.getElementById('syncPayload').value;
-      addLog('Мобильный RPC-запрос отправлен на сервер: ' + val, 'success');
-      
-      setTimeout(() => {
-        addLog('Сервер эмуляции PX VM принял пакет. Данные в кэш-таблице cloud_sync обновлены.', 'success');
-      }, 500);
+    async function toggleDaemonState() {
+      if (vmState.isBooted) {
+        try {
+          const res = await fetch('/api/vm/stop', { method: 'POST' });
+          if (res.ok) {
+            addLog('🛑 [MOBILE TERMINAL] Запрос на остановку отправлен.', 'error');
+            pollVMState();
+          }
+        } catch (e) {}
+      } else {
+        const select = document.getElementById('pmx_file_select_mobile');
+        const filePath = select ? select.value : '/universal_android_cloud.pmx';
+        try {
+          const res = await fetch('/api/vm/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath })
+          });
+          if (res.ok) {
+            addLog('📡 [MOBILE TERMINAL] Скрипт ' + filePath + ' компилируется...', 'info');
+            pollVMState();
+          }
+        } catch (e) {}
+      }
+    }
+
+    async function loadWorkspacePmxFiles() {
+      try {
+        const res = await fetch('/api/files');
+        if (res.ok) {
+          const files = await res.json();
+          const pmxFiles = files.filter(f => f.name.endsWith('.pmx'));
+          const select = document.getElementById('pmx_file_select_mobile');
+          if (select) {
+            select.innerHTML = pmxFiles.map(f => `<option value="${f.path}">${f.name}</option>`).join('');
+            if (vmState.activeFilePath) {
+              select.value = vmState.activeFilePath;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function pollVMState() {
+      try {
+        const res = await fetch('/api/vm/state');
+        if (res.ok) {
+          const state = await res.json();
+          const changedBoot = vmState.isBooted !== state.isBooted;
+          vmState = state;
+
+          // Update Status UI
+          const badge = document.getElementById('daemon_status_badge');
+          const actionBtn = document.getElementById('daemon_action_btn');
+          const bridgeStatus = document.getElementById('bridgeStatus');
+          const portText = document.getElementById('bridge_port_text');
+
+          if (state.isBooted) {
+            if (badge) {
+              badge.innerText = 'ACTIVE';
+              badge.className = 'px-2 py-0.5 text-[9px] font-bold uppercase rounded-full bg-emerald-100 text-emerald-800 animate-pulse';
+            }
+            if (bridgeStatus) {
+              bridgeStatus.innerText = 'STREAM ACTIVE';
+              bridgeStatus.className = 'text-sm font-bold text-emerald-500 mt-0.5';
+            }
+            if (portText) {
+              portText.innerText = 'http://localhost:' + state.port;
+            }
+            if (actionBtn) {
+              actionBtn.innerText = 'Остановить Primix Daemon';
+              actionBtn.className = 'ios-button w-full py-3 text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl shadow-md cursor-pointer';
+            }
+          } else {
+            if (badge) {
+              badge.innerText = 'INACTIVE';
+              badge.className = 'px-2 py-0.5 text-[9px] font-bold uppercase rounded-full bg-gray-200 text-gray-700';
+            }
+            if (bridgeStatus) {
+              bridgeStatus.innerText = 'DAEMON OFFLINE';
+              bridgeStatus.className = 'text-sm font-bold text-amber-500 mt-0.5';
+            }
+            if (portText) {
+              portText.innerText = 'OFFLINE';
+            }
+            if (actionBtn) {
+              actionBtn.innerText = 'Запустить Primix Daemon';
+              actionBtn.className = 'ios-button w-full py-3 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-xl shadow-md cursor-pointer';
+            }
+          }
+
+          // Populate Dynamic Database tables 
+          const selectTbl = document.getElementById('mobile_db_table');
+          if (selectTbl && (changedBoot || selectTbl.children.length <= 1)) {
+            if (state.tables && state.tables.length > 0) {
+              selectTbl.innerHTML = state.tables.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+              updateMobileFields();
+            } else {
+              selectTbl.innerHTML = '<option value="">Нет таблиц</option>';
+              updateMobileFields();
+            }
+          }
+
+          // Update Log feeds
+          renderLogs();
+        }
+      } catch (e) {}
+    }
+
+    function updateMobileFields() {
+      const selectTbl = document.getElementById('mobile_db_table');
+      const container = document.getElementById('mobile_fields_container');
+      if (!selectTbl || !container) return;
+
+      const tblName = selectTbl.value;
+      const targetTable = vmState.tables.find(t => t.name === tblName);
+      if (!targetTable) {
+        container.innerHTML = '<p class="text-xs text-gray-400 italic">Сначала запустите демона, чтобы сгенерировать поля.</p>';
+        return;
+      }
+
+      container.innerHTML = targetTable.columns.map(col => `
+        <div class="space-y-1">
+          <label class="text-[10px] font-semibold text-gray-400 block">${col}:</label>
+          <input 
+            type="text" 
+            data-column="${col}" 
+            placeholder="Введите ${col}" 
+            required
+            class="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono transition duration-150"
+          >
+        </div>
+      `).join('');
+    }
+
+    async function sendMobilePayload() {
+      const selectTbl = document.getElementById('mobile_db_table');
+      if (!selectTbl || !selectTbl.value) return;
+
+      const tblName = selectTbl.value;
+      const inputs = document.querySelectorAll('#mobile_fields_container input');
+      const rowData = {};
+      inputs.forEach(input => {
+        const col = input.getAttribute('data-column');
+        rowData[col] = input.value;
+      });
+
+      try {
+        const res = await fetch('/api/vm/db/insert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableName: tblName, rowData })
+        });
+        if (res.ok) {
+          addLog('💾 [Cocoa REST Client] Успешная отправка записи в БД!', 'success');
+          inputs.forEach(input => input.value = '');
+          pollVMState();
+        }
+      } catch (err) {
+        addLog('❌ Ошибка отправки пакета по мосту: ' + err.message, 'error');
+      }
+    }
+
+    function renderLogs() {
+      if (!vmState.logs || vmState.logs.length === 0) return;
+      parent.innerHTML = '';
+      vmState.logs.forEach(log => {
+        const val = document.createElement('div');
+        let colorClass = 'text-slate-350';
+        if (log.type === 'success') colorClass = 'text-[#34c759] font-medium';
+        if (log.type === 'error') colorClass = 'text-[#ff3b30] font-bold';
+        if (log.type === 'info') colorClass = 'text-[#0071e3]';
+        
+        val.innerHTML = `<span class="text-gray-500 font-mono">[${log.timestamp || '00:00:00'}]</span> <span class="${colorClass}">${log.message}</span>`;
+        parent.appendChild(val);
+      });
+      parent.scrollTop = parent.scrollHeight;
     }
 
     function clearLogs() {
-      document.getElementById('logStack').innerHTML = '<div class="text-gray-500 italic text-center pt-8">Логи очищены.</div>';
+      fetch('/api/vm/logs/clear', { method: 'POST' })
+        .then(() => {
+          parent.innerHTML = '<div class="text-gray-500 italic text-center pt-8">Логи очищены.</div>';
+        });
     }
 
-    addLog('Инициализация Cocoa WebView Client...', 'info');
-    addLog('Winsock / CoreOS подключен к удаленному порту хоста 3000.', 'success');
+    window.addEventListener('DOMContentLoaded', () => {
+      loadWorkspacePmxFiles();
+      pollVMState();
+      
+      setInterval(() => pollVMState(), 1500);
+
+      addLog('Инициализация Cocoa WebView Client...', 'info');
+      addLog('Winsock / CoreOS подключен к удаленному порту хоста 3000.', 'success');
+    });
   </script>
 </body>
 </html>
