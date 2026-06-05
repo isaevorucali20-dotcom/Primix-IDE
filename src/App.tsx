@@ -32,8 +32,19 @@ import {
   Cloud,
   CloudOff,
   LogOut,
-  LogIn
+  LogIn,
+  TrendingUp
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from "recharts";
 import { TEMPLATES } from "./data/templates";
 import { ProjectFile, PXVMState, DiagnosticError, ChatMessage } from "./types";
 import { diagnosePrimixCode, compilePrimixCode } from "./utils/compiler";
@@ -105,6 +116,39 @@ export default function App() {
   const [selectedSimTable, setSelectedSimTable] = useState<string>("");
   const [newRowData, setNewRowData] = useState<Record<string, string>>({});
   const [showAddRowForm, setShowAddRowForm] = useState<boolean>(false);
+
+  // Debugger sub panel navigation & real-time telemetry variables history
+  const [debuggerSubTab, setDebuggerSubTab] = useState<"controls" | "chart">("controls");
+  const [isLiveTelemetryEmulation, setIsLiveTelemetryEmulation] = useState<boolean>(false);
+  const [watchHistory, setWatchHistory] = useState<Array<{ timestamp: string; [varName: string]: any }>>([]);
+  const latestVariablesRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    latestVariablesRef.current = vmState.variables;
+  }, [vmState.variables]);
+
+  // Jitter variables periodically to show moving real-time graphs on Recharts
+  useEffect(() => {
+    if (!vmState.isBooted || !isLiveTelemetryEmulation) return;
+
+    const interval = setInterval(() => {
+      const currentVars = latestVariablesRef.current;
+      const numericVars = Object.entries(currentVars).filter(([k, v]) => !isNaN(parseFloat(v as string)));
+      if (numericVars.length === 0) return;
+
+      // Jitter a random numeric variable to show real-time stream updates.
+      const randIndex = Math.floor(Math.random() * numericVars.length);
+      const [vName, vVal] = numericVars[randIndex];
+      const valNum = parseFloat(vVal as string);
+      
+      const delta = (Math.random() * 12 - 6); // Delta between -6 and +6
+      const newVal = Math.max(5, Math.min(145, Math.round(valNum + delta)));
+      
+      handleVariableChange(vName, String(newVal));
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [vmState.isBooted, isLiveTelemetryEmulation]);
 
   // Gemini assistant states
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -299,6 +343,28 @@ export default function App() {
         message: `👁️ Reactive Core: Запущен фоновый наблюдатель (watch) за переменной '${w.variable}'`
       });
     });
+
+    // Initialize watch history state for Recharts
+    const initialHistPoint: Record<string, any> = {
+      timestamp: new Date().toLocaleTimeString()
+    };
+    Object.entries(parsed.variables).forEach(([k, v]) => {
+      const parsedNum = parseFloat(v);
+      if (!isNaN(parsedNum)) {
+        initialHistPoint[k] = parsedNum;
+      } else {
+        if (v === "Online" || v === "OK" || v === "ADMIN") {
+          initialHistPoint[k] = 1;
+        } else if (v === "Offline" || v === "RESTRICTED") {
+          initialHistPoint[k] = 0;
+        } else if (v === "BREACH") {
+          initialHistPoint[k] = -1;
+        } else {
+          initialHistPoint[k] = 0;
+        }
+      }
+    });
+    setWatchHistory([initialHistPoint]);
 
     setVmState({
       isBooted: true,
@@ -663,6 +729,38 @@ export default function App() {
   // Modify simulated variable to trigger react watch
   const handleVariableChange = (varName: string, newValue: string) => {
     if (!vmState.isBooted) return;
+
+    // Record the telemetry coordinate in real-time history for Recharts
+    setWatchHistory(prev => {
+      const currentVars = { ...latestVariablesRef.current, [varName]: newValue };
+      const newPoint: Record<string, any> = {
+        timestamp: new Date().toLocaleTimeString()
+      };
+      
+      Object.entries(currentVars).forEach(([k, v]) => {
+        const valStr = String(v);
+        const parsedNum = parseFloat(valStr);
+        if (!isNaN(parsedNum)) {
+          newPoint[k] = parsedNum;
+        } else {
+          if (valStr === "Online" || valStr === "OK" || valStr === "ADMIN") {
+            newPoint[k] = 1;
+          } else if (valStr === "Offline" || valStr === "RESTRICTED") {
+            newPoint[k] = 0;
+          } else if (valStr === "BREACH") {
+            newPoint[k] = -1;
+          } else {
+            newPoint[k] = 0;
+          }
+        }
+      });
+
+      const updated = [...prev, newPoint];
+      if (updated.length > 30) {
+        return updated.slice(updated.length - 30);
+      }
+      return updated;
+    });
 
     setVmState(prev => {
       const updatedVars = { ...prev.variables, [varName]: newValue };
@@ -1335,263 +1433,396 @@ ${activeFile.content}
 
               {vmState.isBooted ? (
                 <>
-                  {/* Database Emulator sub section */}
-                  <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                        <Database className="h-3.5 w-3.5 text-cyan-400" /> Имитатор СУБД (Relational)
-                      </span>
-                      {vmState.tables.length > 0 && (
-                        <button
-                          onClick={() => setShowAddRowForm(!showAddRowForm)}
-                          className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-300 text-[10px] flex items-center gap-1"
-                        >
-                          <Plus className="h-2.5 w-2.5 text-cyan-400" /> Добавить
-                        </button>
-                      )}
-                    </div>
-
-                    {vmState.tables.length === 0 ? (
-                      <p className="text-[10px] text-slate-500 italic">Таблицы базы данных не обнаружены в скрипте.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {/* Table Selector */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-500">Выбор таблицы:</span>
-                          <select
-                            value={selectedSimTable}
-                            onChange={e => {
-                              setSelectedSimTable(e.target.value);
-                              const tbl = vmState.tables.find(t => t.name === e.target.value);
-                              if (tbl) {
-                                const form: Record<string, string> = {};
-                                tbl.columns.forEach(col => {
-                                  form[col] = "";
-                                });
-                                setNewRowData(form);
-                              }
-                            }}
-                            className="bg-slate-950 text-[11px] text-slate-300 py-1 px-1.5 rounded border border-slate-800 focus:outline-none flex-1"
-                          >
-                            {vmState.tables.map(t => (
-                              <option key={t.name} value={t.name}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Inline Data Entry Form */}
-                        {showAddRowForm && (
-                          <form onSubmit={handleAddRow} className="bg-slate-950 p-2.5 rounded border border-slate-800 space-y-2">
-                            <span className="text-[10px] uppercase font-semibold text-cyan-400 tracking-wider">Новый кортеж в {selectedSimTable}</span>
-                            <div className="space-y-1.5">
-                              {Object.keys(newRowData).map(col => (
-                                <div key={col} className="flex items-center gap-1.5 justify-between">
-                                  <span className="text-[10px] text-slate-500 truncate font-mono max-w-24">{col}:</span>
-                                  <input
-                                    type="text"
-                                    required
-                                    value={newRowData[col]}
-                                    onChange={e => setNewRowData(prev => ({ ...prev, [col]: e.target.value }))}
-                                    placeholder={`значение`}
-                                    className="bg-slate-900 border border-slate-800 focus:outline-none text-[11px] px-1.5 py-0.5 rounded text-slate-300 w-36"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex gap-2 justify-end pt-1">
-                              <button
-                                type="button"
-                                onClick={() => setShowAddRowForm(false)}
-                                className="px-2 py-0.5 text-[9px] bg-slate-800 text-slate-400 rounded hover:bg-slate-700"
-                              >
-                                Отмена
-                              </button>
-                              <button
-                                type="submit"
-                                className="px-2 py-0.5 text-[9px] bg-gradient-to-tr from-cyan-600 to-purple-600 text-white rounded font-medium"
-                              >
-                                Вставить
-                              </button>
-                            </div>
-                          </form>
-                        )}
-
-                        {/* Computed Table Matrix */}
-                        {(() => {
-                          const currentTbl = vmState.tables.find(t => t.name === selectedSimTable);
-                          if (!currentTbl) return null;
-                          return (
-                            <div className="overflow-x-auto border border-slate-800 rounded bg-slate-950/40">
-                              <table className="w-full text-left text-[10px] font-mono border-collapse">
-                                <thead>
-                                  <tr className="bg-slate-900/80 border-b border-slate-850">
-                                    {currentTbl.columns.map(c => (
-                                      <th key={c} className="p-1.5 px-2 text-slate-500 uppercase">{c}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {currentTbl.rows.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={currentTbl.columns.length} className="p-2 text-center text-slate-600 italic">
-                                        Таблица пуста.
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    currentTbl.rows.map((row, rIdx) => (
-                                      <tr key={rIdx} className="border-b border-slate-900 hover:bg-slate-900/30">
-                                        {currentTbl.columns.map(col => (
-                                          <td key={col} className="p-1.5 px-2 text-slate-300 truncate max-w-28">
-                                            {row[col] || "NULL"}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
+                  {/* Debugger Sub-Tabs Selectors */}
+                  <div className="flex gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setDebuggerSubTab("controls")}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1.5 ${
+                        debuggerSubTab === "controls"
+                          ? "bg-slate-800/80 text-white shadow border border-white/5"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      🎛️ Интеракторы
+                    </button>
+                    <button
+                      onClick={() => setDebuggerSubTab("chart")}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1.5 ${
+                        debuggerSubTab === "chart"
+                          ? "bg-slate-800/80 text-white shadow border border-white/5"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-400 animate-pulse" /> Живой График
+                    </button>
                   </div>
 
-                  {/* API API REST Client sub section */}
-                  <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
-                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                      <Network className="h-3.5 w-3.5 text-purple-400" /> Имитатор API Клиента REST
-                    </span>
-
-                    {vmState.routes.length === 0 ? (
-                      <p className="text-[10px] text-slate-500 italic">Веб-маршруты не определены в скрипте.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex gap-1.5">
-                          <select
-                            value={selectedSimRoute}
-                            onChange={e => {
-                              setSelectedSimRoute(e.target.value);
-                              setSimResponse(null);
-                            }}
-                            className="bg-slate-950 text-[11px] text-slate-300 py-1.5 px-1 rounded border border-slate-850 focus:outline-none flex-1 font-mono"
-                          >
-                            {vmState.routes.map(r => (
-                              <option key={r.path} value={r.path}>
-                                GET {r.path}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={executeSimulatedRequest}
-                            className="p-1.5 px-3 bg-gradient-to-r from-purple-600 to-cyan-600 text-white rounded text-[11px] font-semibold active:opacity-90 transition flex items-center gap-1"
-                          >
-                            <Send className="h-3.5 w-3.5" /> Запрос
-                          </button>
+                  {debuggerSubTab === "controls" ? (
+                    <>
+                      {/* Database Emulator sub section */}
+                      <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                            <Database className="h-3.5 w-3.5 text-cyan-400" /> Имитатор СУБД (Relational)
+                          </span>
+                          {vmState.tables.length > 0 && (
+                            <button
+                              onClick={() => setShowAddRowForm(!showAddRowForm)}
+                              className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-300 text-[10px] flex items-center gap-1"
+                            >
+                              <Plus className="h-2.5 w-2.5 text-cyan-400" /> Добавить
+                            </button>
+                          )}
                         </div>
 
-                        {/* HTTP Output Visualizer Card */}
-                        {simResponse && (
-                          <div className="bg-slate-950 border border-slate-850 p-2.5 rounded space-y-1.5">
-                            <div className="flex items-center justify-between text-[9px] font-mono border-b border-slate-900 pb-1">
-                              <span className="text-emerald-400 font-bold">{simResponse.status}</span>
-                              <span className="text-slate-500">Время: {simResponse.time}</span>
+                        {vmState.tables.length === 0 ? (
+                          <p className="text-[10px] text-slate-500 italic">Таблицы базы данных не обнаружены в скрипте.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {/* Table Selector */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-500">Выбор таблицы:</span>
+                              <select
+                                value={selectedSimTable}
+                                onChange={e => {
+                                  setSelectedSimTable(e.target.value);
+                                  const tbl = vmState.tables.find(t => t.name === e.target.value);
+                                  if (tbl) {
+                                    const form: Record<string, string> = {};
+                                    tbl.columns.forEach(col => {
+                                      form[col] = "";
+                                    });
+                                    setNewRowData(form);
+                                  }
+                                }}
+                                className="bg-slate-950 text-[11px] text-slate-300 py-1 px-1.5 rounded border border-slate-800 focus:outline-none flex-1"
+                              >
+                                {vmState.tables.map(t => (
+                                  <option key={t.name} value={t.name}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
-                            <div className="text-[10px] text-slate-300 font-mono break-all py-1">
-                              {/* If welcome message starts with brace, render inside pre tag */}
-                              {simResponse.data.startsWith("{") ? (
-                                <pre className="font-mono text-[9px] text-slate-400 leading-tight bg-slate-900/50 p-1.5 rounded overflow-x-auto">
-                                  {simResponse.data}
-                                </pre>
-                              ) : (
-                                <span>"{simResponse.data}"</span>
-                              )}
-                            </div>
+
+                            {/* Inline Data Entry Form */}
+                            {showAddRowForm && (
+                              <form onSubmit={handleAddRow} className="bg-slate-950 p-2.5 rounded border border-slate-800 space-y-2">
+                                <span className="text-[10px] uppercase font-semibold text-cyan-400 tracking-wider">Новый кортеж в {selectedSimTable}</span>
+                                <div className="space-y-1.5">
+                                  {Object.keys(newRowData).map(col => (
+                                    <div key={col} className="flex items-center gap-1.5 justify-between">
+                                      <span className="text-[10px] text-slate-500 truncate font-mono max-w-24">{col}:</span>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={newRowData[col]}
+                                        onChange={e => setNewRowData(prev => ({ ...prev, [col]: e.target.value }))}
+                                        placeholder={`значение`}
+                                        className="bg-slate-900 border border-slate-800 focus:outline-none text-[11px] px-1.5 py-0.5 rounded text-slate-300 w-36"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2 justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAddRowForm(false)}
+                                    className="px-2 py-0.5 text-[9px] bg-slate-800 text-slate-400 rounded hover:bg-slate-700"
+                                  >
+                                    Отмена
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    className="px-2 py-0.5 text-[9px] bg-gradient-to-tr from-cyan-600 to-purple-600 text-white rounded font-medium"
+                                  >
+                                    Вставить
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+
+                            {/* Computed Table Matrix */}
+                            {(() => {
+                              const currentTbl = vmState.tables.find(t => t.name === selectedSimTable);
+                              if (!currentTbl) return null;
+                              return (
+                                <div className="overflow-x-auto border border-slate-800 rounded bg-slate-950/40">
+                                  <table className="w-full text-left text-[10px] font-mono border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-900/80 border-b border-slate-850">
+                                        {currentTbl.columns.map(c => (
+                                          <th key={c} className="p-1.5 px-2 text-slate-500 uppercase">{c}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {currentTbl.rows.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={currentTbl.columns.length} className="p-2 text-center text-slate-600 italic">
+                                            Таблица пуста.
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        currentTbl.rows.map((row, rIdx) => (
+                                          <tr key={rIdx} className="border-b border-slate-900 hover:bg-slate-900/30">
+                                            {currentTbl.columns.map(col => (
+                                              <td key={col} className="p-1.5 px-2 text-slate-300 truncate max-w-28">
+                                                {row[col] || "NULL"}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Memory registers / variables sliders list */}
-                  {Object.keys(vmState.variables).length > 0 && (
-                    <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
-                      <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                        <Activity className="h-3.5 w-3.5 text-amber-500 animate-pulse" /> Реестры Реактивности и Свойств
-                      </span>
-                      <p className="text-[10px] text-slate-500 leading-snug">
-                        Изменяйте сигнальные переменные ползунками для симуляции реактивных зависимостей (watch):
-                      </p>
+                      {/* API API REST Client sub section */}
+                      <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                          <Network className="h-3.5 w-3.5 text-purple-400" /> Имитатор API Клиента REST
+                        </span>
 
-                      <div className="space-y-2 w-full pt-1">
-                        {(Object.entries(vmState.variables) as [string, string][]).map(([vName, vVal]) => {
-                          const isNumeric = !isNaN(parseFloat(vVal));
-                          return (
-                            <div key={vName} className="p-2 rounded bg-slate-950/60 border border-slate-850/50 space-y-1">
-                              <div className="flex justify-between items-center text-[10px] font-mono">
-                                <span className="text-slate-400">{vName}</span>
-                                <span className={`font-bold ${isNumeric ? "text-cyan-400" : "text-amber-400"}`}>
-                                  {vVal}
-                                </span>
-                              </div>
-                              {isNumeric ? (
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="150"
-                                  value={parseFloat(vVal)}
-                                  onChange={e => handleVariableChange(vName, e.target.value)}
-                                  className="w-full accent-cyan-500 scale-95 origin-left"
-                                />
-                              ) : (
-                                <div className="flex gap-1 pt-0.5">
-                                  {["Online", "Offline", "RESTRICTED", "BREACH", "OK", "ADMIN", "CLIENT"].includes(vVal) ? (
-                                    <>
-                                      {vVal === "Online" || vVal === "Offline" ? (
-                                        ["Online", "Offline"].map(opt => (
-                                          <button
-                                            key={opt}
-                                            onClick={() => handleVariableChange(vName, opt)}
-                                            className={`px-1.5 py-0.5 rounded text-[8px] border font-semibold ${
-                                              vVal === opt
-                                                ? "bg-cyan-500/10 border-cyan-450 text-cyan-200"
-                                                : "bg-slate-900 border-slate-800 text-slate-500"
-                                            }`}
-                                          >
-                                            {opt}
-                                          </button>
-                                        ))
-                                      ) : ["RESTRICTED", "BREACH", "OK", "ADMIN", "CLIENT"].includes(vVal) ? (
-                                        ["OK", "BREACH", "RESTRICTED", "ADMIN", "CLIENT"].map(opt => (
-                                          <button
-                                            key={opt}
-                                            onClick={() => handleVariableChange(vName, opt)}
-                                            className={`px-1 py-0.5 rounded text-[8px] border font-semibold ${
-                                              vVal === opt
-                                                ? "bg-purple-500/10 border-purple-450 text-purple-200"
-                                                : "bg-slate-900 border-slate-800 text-slate-500"
-                                            }`}
-                                          >
-                                            {opt}
-                                          </button>
-                                        ))
-                                      ) : null}
-                                    </>
+                        {vmState.routes.length === 0 ? (
+                          <p className="text-[10px] text-slate-500 italic">Веб-маршруты не определены в скрипте.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex gap-1.5">
+                              <select
+                                value={selectedSimRoute}
+                                onChange={e => {
+                                  setSelectedSimRoute(e.target.value);
+                                  setSimResponse(null);
+                                }}
+                                className="bg-slate-950 text-[11px] text-slate-300 py-1.5 px-1 rounded border border-slate-850 focus:outline-none flex-1 font-mono"
+                              >
+                                {vmState.routes.map(r => (
+                                  <option key={r.path} value={r.path}>
+                                    GET {r.path}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={executeSimulatedRequest}
+                                className="p-1.5 px-3 bg-gradient-to-r from-purple-600 to-cyan-600 text-white rounded text-[11px] font-semibold active:opacity-90 transition flex items-center gap-1"
+                              >
+                                <Send className="h-3.5 w-3.5" /> Запрос
+                              </button>
+                            </div>
+
+                            {/* HTTP Output Visualizer Card */}
+                            {simResponse && (
+                              <div className="bg-slate-950 border border-slate-850 p-2.5 rounded space-y-1.5">
+                                <div className="flex items-center justify-between text-[9px] font-mono border-b border-slate-900 pb-1">
+                                  <span className="text-emerald-400 font-bold">{simResponse.status}</span>
+                                  <span className="text-slate-500">Время: {simResponse.time}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-300 font-mono break-all py-1">
+                                  {/* If welcome message starts with brace, render inside pre tag */}
+                                  {simResponse.data.startsWith("{") ? (
+                                    <pre className="font-mono text-[9px] text-slate-400 leading-tight bg-slate-900/50 p-1.5 rounded overflow-x-auto">
+                                      {simResponse.data}
+                                    </pre>
                                   ) : (
-                                    <input
-                                      type="text"
-                                      value={vVal}
-                                      onChange={e => handleVariableChange(vName, e.target.value)}
-                                      className="bg-slate-900 border border-slate-800 text-[10px] px-1 py-0.5 focus:outline-none rounded text-slate-300 w-full font-mono"
-                                    />
+                                    <span>"{simResponse.data}"</span>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Memory registers / variables sliders list */}
+                      {Object.keys(vmState.variables).length > 0 && (
+                        <div className="border border-slate-800/80 p-3 rounded-lg bg-slate-900/40 space-y-2">
+                          <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                            <Activity className="h-3.5 w-3.5 text-amber-500 animate-pulse" /> Реестры Реактивности и Свойств
+                          </span>
+                          <p className="text-[10px] text-slate-500 leading-snug">
+                            Изменяйте сигнальные переменные ползунками для симуляции реактивных зависимостей (watch):
+                          </p>
+
+                          <div className="space-y-2 w-full pt-1">
+                            {(Object.entries(vmState.variables) as [string, string][]).map(([vName, vVal]) => {
+                              const isNumeric = !isNaN(parseFloat(vVal));
+                              return (
+                                <div key={vName} className="p-2 rounded bg-slate-950/60 border border-slate-850/50 space-y-1">
+                                  <div className="flex justify-between items-center text-[10px] font-mono">
+                                    <span className="text-slate-400">{vName}</span>
+                                    <span className={`font-bold ${isNumeric ? "text-cyan-400" : "text-amber-400"}`}>
+                                      {vVal}
+                                    </span>
+                                  </div>
+                                  {isNumeric ? (
+                                    <input
+                                      type="range"
+                                      min="0"
+                                      max="150"
+                                      value={parseFloat(vVal)}
+                                      onChange={e => handleVariableChange(vName, e.target.value)}
+                                      className="w-full accent-cyan-500 scale-95 origin-left"
+                                    />
+                                  ) : (
+                                    <div className="flex gap-1 pt-0.5">
+                                      {["Online", "Offline", "RESTRICTED", "BREACH", "OK", "ADMIN", "CLIENT"].includes(vVal) ? (
+                                        <>
+                                          {vVal === "Online" || vVal === "Offline" ? (
+                                            ["Online", "Offline"].map(opt => (
+                                              <button
+                                                key={opt}
+                                                onClick={() => handleVariableChange(vName, opt)}
+                                                className={`px-1.5 py-0.5 rounded text-[8px] border font-semibold ${
+                                                  vVal === opt
+                                                    ? "bg-cyan-500/10 border-cyan-450 text-cyan-200"
+                                                    : "bg-slate-900 border-slate-800 text-slate-500"
+                                                }`}
+                                              >
+                                                {opt}
+                                              </button>
+                                            ))
+                                          ) : ["RESTRICTED", "BREACH", "OK", "ADMIN", "CLIENT"].includes(vVal) ? (
+                                            ["OK", "BREACH", "RESTRICTED", "ADMIN", "CLIENT"].map(opt => (
+                                              <button
+                                                key={opt}
+                                                onClick={() => handleVariableChange(vName, opt)}
+                                                className={`px-1 py-0.5 rounded text-[8px] border font-semibold ${
+                                                  vVal === opt
+                                                    ? "bg-purple-500/10 border-purple-450 text-purple-200"
+                                                    : "bg-slate-900 border-slate-800 text-slate-500"
+                                                }`}
+                                              >
+                                                {opt}
+                                              </button>
+                                            ))
+                                          ) : null}
+                                        </>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={vVal}
+                                          onChange={e => handleVariableChange(vName, e.target.value)}
+                                          className="bg-slate-900 border border-slate-800 text-[10px] px-1 py-0.5 focus:outline-none rounded text-slate-300 w-full font-mono"
+                                        />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Living Visual Recharts Chart Tab Content */
+                    <div className="border border-slate-800/80 p-4 rounded-xl bg-slate-900/40 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            <TrendingUp className="h-4 w-4 text-emerald-400 animate-pulse" /> Наблюдение в реальном времени
+                          </span>
+                          <span className="text-[10px] text-slate-500 mt-0.5">Линейный график флуктуаций значений</span>
+                        </div>
+                        
+                        {/* Toggle Telemetry Stream */}
+                        <button
+                          onClick={() => setIsLiveTelemetryEmulation(!isLiveTelemetryEmulation)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow transition-all duration-150 active:scale-95 ${
+                            isLiveTelemetryEmulation
+                              ? "bg-[#34c759] text-white animate-pulse"
+                              : "bg-[#2c2c2e] text-slate-400 hover:text-slate-200 border border-white/5"
+                          }`}
+                        >
+                          {isLiveTelemetryEmulation ? (
+                            <>
+                              <span className="h-2 w-2 rounded-full bg-white animate-ping"></span>
+                              Стоп Стример
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-2.5 w-2.5" />
+                              Старт Стример
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Dynamic chart canvas using Recharts */}
+                      <div className="h-56 w-full bg-[#09090b] rounded-xl border border-slate-850/80 p-2 pt-4 flex flex-col items-center justify-center relative select-none">
+                        {watchHistory.length < 2 && (
+                          <div className="absolute inset-0 bg-[#09090b]/95 rounded-xl flex flex-col items-center justify-center text-center p-4 z-10 border border-slate-850/80">
+                            <RefreshCw className="h-6 w-6 text-emerald-400 animate-spin mb-1.5" />
+                            <span className="text-[10px] text-slate-400 font-bold">Ожидание данных телеметрии...</span>
+                            <span className="text-[9px] text-slate-500 mt-0.5">Измените переменные или включите стример</span>
+                          </div>
+                        )}
+                        
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={watchHistory} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                            <XAxis 
+                              dataKey="timestamp" 
+                              stroke="rgba(255,255,255,0.25)" 
+                              fontSize={8} 
+                              tickLine={false} 
+                            />
+                            <YAxis 
+                              stroke="rgba(255,255,255,0.25)" 
+                              fontSize={8} 
+                              tickLine={false}
+                              domain={['auto', 'auto']}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "#0d0d0d",
+                                borderColor: "rgba(255,255,255,0.1)",
+                                borderRadius: "8px",
+                                fontSize: "10px",
+                                color: "#e2e8f0"
+                              }}
+                            />
+                            <Legend 
+                              verticalAlign="bottom" 
+                              height={20} 
+                              iconSize={7}
+                              iconType="circle"
+                              wrapperStyle={{ fontSize: '9px', color: '#94a3b8', paddingTop: 10 }}
+                            />
+                            {(() => {
+                              // Extract numeric variables
+                              const numericVarNames = Object.entries(vmState.variables)
+                                .filter(([k, v]) => !isNaN(parseFloat(v as string)))
+                                .map(([k]) => k);
+                                
+                              const lineColors = ["#34c759", "#00a2ff", "#ff9500", "#af52de", "#ff2d55", "#ffcc00"];
+                              return numericVarNames.map((varName, idx) => (
+                                <Line
+                                  key={varName}
+                                  type="monotone"
+                                  dataKey={varName}
+                                  stroke={lineColors[idx % lineColors.length]}
+                                  strokeWidth={2}
+                                  dot={{ r: 1.5, strokeWidth: 1 }}
+                                  activeDot={{ r: 4 }}
+                                  name={varName}
+                                  animationDuration={200}
+                                />
+                              ));
+                            })()}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="p-3 bg-slate-950/70 border border-slate-850 rounded-lg text-[10px] text-slate-400 leading-relaxed font-sans">
+                        <p className="font-semibold text-slate-300 mb-1">💡 Как это работает:</p>
+                        Каждая сигнальная PMX-переменная (например, <span className="font-mono text-cyan-400">cpu_usage</span>) отслеживается в реальном времени. Включение <span className="text-emerald-500 font-bold">Стримера</span> симулирует непрерывную нагрузку и строит график флуктуации watch-триггеров.
                       </div>
                     </div>
                   )}

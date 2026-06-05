@@ -481,6 +481,511 @@ try {
 `,
   },
   {
+    name: "win_desktop_gui.html",
+    path: "/win_desktop_gui.html",
+    platform: "win10_11",
+    content: `<!-- 
+  =====================================================================
+  PRIMIX (PX) WINDOWS MODERN GUI INTERACTIVE CLIENT — FLUENT ACRYLIC
+  Дизайн-концепция: Windows 11 Fluent Acrylic Dark (стекломорфизм, закруглённые углы, системные цвета)
+  Совместимость: Chrome, Microsoft Edge, WebView2, Electron Desktop App Container, HTA, Tauri
+  =====================================================================
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Primix Windows Modern GUI Dashboard</title>
+  
+  <!-- Tailwind CSS для утонченной верстки элементов -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            winAccent: '#0078d4',
+            winAccentHover: '#005a9e',
+            winDarkBg: '#1f1f1f',
+            winPanel: 'rgba(32, 32, 32, 0.85)'
+          },
+          fontFamily: {
+            sans: ['"Segoe UI"', 'Segoe', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['Consolas', 'Courier New', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 50%, #1e1e1e 0%, #0e0e0e 100%);
+      color: #f3f3f3;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    
+    /* Acrylic Material backdrop blur mimicking Win11 glass */
+    .acrylic-glass {
+      background: rgba(32, 32, 32, 0.75);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+    }
+    
+    /* Win11 Button Ripple & Active feedback rules */
+    .win-button {
+      transition: all 0.1s cubic-bezier(0.1, 0.9, 0.2, 1);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .win-button:active {
+      transform: scale(0.97);
+      background-color: rgba(255, 255, 255, 0.04);
+    }
+    .win-accent-button {
+      background: #0078d4;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      transition: all 0.1s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    .win-accent-button:hover {
+      background: #1084e3;
+    }
+    .win-accent-button:active {
+      transform: scale(0.97);
+      background: #005a9e;
+    }
+    
+    /* Custom thin Win11 range slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.2);
+      height: 4px;
+      border-radius: 2px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 100%;
+      background: #0078d4;
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      transition: all 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #1084e3;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body class="p-6 min-h-screen flex flex-col justify-between space-y-6">
+
+  <!-- Fake Win11 Window Command Rail Header -->
+  <header class="w-full flex items-center justify-between border-b border-white/5 pb-3">
+    <div class="flex items-center gap-3">
+      <!-- Embedded Win11 logo simulation icon -->
+      <svg class="h-4 w-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M0 0h11.4v11.4H0V0zm12.6 0H24v11.4H12.6V0zM0 12.6h11.4V24H0V12.6zm12.6 0H24V24H12.6V12.6z"/>
+      </svg>
+      <span class="text-xs font-semibold tracking-wider text-slate-300 uppercase font-sans">Primix GUI Desktop Companion Workspace</span>
+    </div>
+    
+    <!-- Mimic Windows Frame Action Controls -->
+    <div class="flex items-center gap-4 text-slate-500 text-xs font-mono">
+      <span>—</span>
+      <span>❑</span>
+      <span class="hover:text-red-500 cursor-pointer">✕</span>
+    </div>
+  </header>
+
+  <!-- Dual Layout Panels Grid Workspace -->
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-grow">
+    
+    <!-- LEFT SIDE COLUMN: Controls, Range Sliders, and Databases (colspan: 5) -->
+    <section class="lg:col-span-5 flex flex-col gap-4">
+      
+      <!-- Panel 1: Network & Connection Core Settings -->
+      <div class="acrylic-glass rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Сетевой Шлюз (Winsock Router)</h2>
+          <span class="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="bg-white/5 p-2.5 rounded-lg border border-white/5">
+            <span class="text-[9px] text-slate-500 uppercase font-semibold">Адрес хоста</span>
+            <div class="font-mono text-cyan-400 font-bold mt-0.5">127.0.0.1:3000</div>
+          </div>
+          <div class="bg-white/5 p-2.5 rounded-lg border border-white/5">
+            <span class="text-[9px] text-slate-500 uppercase font-semibold">Состояние моста</span>
+            <div class="font-semibold text-emerald-400 mt-0.5">CONNECTED</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Interactive Property Registers (Sliders) -->
+      <div class="acrylic-glass rounded-xl p-5 space-y-4">
+        <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Реестры и Флуктуации (Interactive Registers)</h3>
+        <p class="text-[10px] text-slate-400 leading-snug">Изменяйте ползунки, чтобы симулировать динамическую нагрузку в реальном времени:</p>
+        
+        <div class="space-y-3.5">
+          <!-- Slider 1 -->
+          <div class="space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="font-mono text-slate-300">cpu_usage (%)</span>
+              <span id="cpu_val" class="font-mono font-bold text-sky-400">45</span>
+            </div>
+            <input 
+              type="range" 
+              id="cpu_slider" 
+              min="5" 
+              max="100" 
+              value="45" 
+              oninput="updateVal('cpu', this.value)"
+              class="w-full cursor-pointer accent-sky-500"
+            >
+          </div>
+          
+          <!-- Slider 2 -->
+          <div class="space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="font-mono text-slate-300">memory_payload (MB)</span>
+              <span id="mem_val" class="font-mono font-bold text-emerald-400">76</span>
+            </div>
+            <input 
+              type="range" 
+              id="mem_slider" 
+              min="10" 
+              max="150" 
+              value="76" 
+              oninput="updateVal('mem', this.value)"
+              class="w-full cursor-pointer accent-emerald-500"
+            >
+          </div>
+
+          <!-- Slider 3 -->
+          <div class="space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
+            <div class="flex justify-between items-center text-[10px]">
+              <span class="font-mono text-slate-300">network_payload (KB/s)</span>
+              <span id="net_val" class="font-mono font-bold text-orange-400">110</span>
+            </div>
+            <input 
+              type="range" 
+              id="net_slider" 
+              min="0" 
+              max="150" 
+              value="110" 
+              oninput="updateVal('net', this.value)"
+              class="w-full cursor-pointer accent-orange-500"
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: Simulated Database SQLite Grid Controller -->
+      <div class="acrylic-glass rounded-xl p-5 space-y-3">
+        <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Эмулятор Таблицы СУБД (Relational Database)</h3>
+        
+        <!-- Input Row Items Block -->
+        <form onsubmit="addTableRow(event)" class="grid grid-cols-3 gap-1.5">
+          <input 
+            type="text" 
+            id="db_device_id" 
+            placeholder="node_id" 
+            required
+            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
+          >
+          <input 
+            type="text" 
+            id="db_sync_key" 
+            placeholder="ключ" 
+            required
+            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
+          >
+          <input 
+            type="text" 
+            id="db_sync_val" 
+            placeholder="значение" 
+            required
+            class="px-2 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded focus:outline-none focus:border-winAccent font-mono"
+          >
+          <button 
+            type="submit" 
+            class="win-accent-button col-span-3 py-1.5 rounded text-[10px] font-bold text-white uppercase tracking-wider"
+          >
+            📎 Добавить кортеж в СУБД
+          </button>
+        </form>
+
+        <!-- Dynamic DBMS Matrix Grid -->
+        <div class="overflow-x-auto border border-white/5 rounded-lg max-h-28 overflow-y-auto bg-black/20">
+          <table class="w-full text-left text-[9px] font-mono border-collapse">
+            <thead>
+              <tr class="bg-white/5 border-b border-white/10 text-slate-400">
+                <th class="p-1 px-2">device_id</th>
+                <th class="p-1 px-2">sync_key</th>
+                <th class="p-1 px-2">sync_val</th>
+              </tr>
+            </thead>
+            <tbody id="dbTableBody">
+              <tr class="border-b border-white/5 hover:bg-white/5">
+                <td class="p-1 px-2 text-slate-300">NODE_001</td>
+                <td class="p-1 px-2 text-slate-400">auth_level</td>
+                <td class="p-1 px-2 text-cyan-400">ADMIN</td>
+              </tr>
+              <tr class="border-b border-white/5 hover:bg-white/5">
+                <td class="p-1 px-2 text-slate-300">NODE_002</td>
+                <td class="p-1 px-2 text-slate-400">system_ping</td>
+                <td class="p-1 px-2 text-emerald-400">22ms</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT SIDE COLUMN: Beautiful real-time plot SVG & Terminal Logs (colspan: 7) -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+      
+      <!-- Panel 4: Beautiful Live Plot Visualization Map -->
+      <div class="acrylic-glass rounded-xl p-5 space-y-4 flex flex-col justify-between flex-1">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs uppercase font-bold tracking-widest text-[#0078d4]">Тренды Реактивности (Real-time Watch Analysis)</h3>
+            <p class="text-[9px] text-slate-500 mt-0.5">Отображает флуктуации сигнальных переменных</p>
+          </div>
+          <!-- Auto jitter stream module button -->
+          <button 
+            onclick="toggleAutoPilot()" 
+            id="toggle_stream_btn"
+            class="win-button px-3 py-1 bg-white/5 text-[9px] font-bold text-slate-300 hover:text-white rounded border border-white/10 flex items-center gap-1 transition"
+          >
+            ⚡ Стример: ВЫКЛ
+          </button>
+        </div>
+
+        <!-- SVG Real-time Plotting Canvas Box -->
+        <div class="bg-black/40 h-52 rounded-lg border border-white/5 p-2 flex items-end justify-center relative select-none">
+          
+          <!-- Legend tags inside graph -->
+          <div class="absolute top-2 left-2 flex gap-3 text-[8px] font-mono">
+            <span class="flex items-center gap-1.5 text-sky-400">■ cpu_usage</span>
+            <span class="flex items-center gap-1.5 text-emerald-400">■ memory_payload</span>
+            <span class="flex items-center gap-1.5 text-orange-400">■ network_payload</span>
+          </div>
+
+          <svg id="chart_svg" class="w-full h-full" viewBox="0 0 500 160">
+            <!-- Grid Lines -->
+            <line x1="0" y1="40" x2="500" y2="40" stroke="rgba(255,255,255,0.03)" />
+            <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.03)" />
+            <line x1="0" y1="120" x2="500" y2="120" stroke="rgba(255,255,255,0.03)" />
+            
+            <!-- Real-time Lines -->
+            <path id="cpu_path" d="" fill="none" stroke="#00c2ff" stroke-width="2.5" stroke-linecap="round"></path>
+            <path id="mem_path" d="" fill="none" stroke="#27c93f" stroke-width="2.5" stroke-linecap="round"></path>
+            <path id="net_path" d="" fill="none" stroke="#ff9500" stroke-width="2.5" stroke-linecap="round"></path>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Panel 5: Win11 Diagnostics Console / Feed Log -->
+      <div class="acrylic-glass rounded-xl p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase font-bold tracking-widest text-slate-400">Журнал Событий Windows (WS Diagnostician)</span>
+          <button onclick="clearConsoleLog()" class="text-[9px] text-[#0078d4] hover:underline">Очистить лог</button>
+        </div>
+        
+        <!-- Logs list -->
+        <div 
+          id="winLogs" 
+          class="h-32 text-[9px] font-mono p-3 bg-black/60 border border-white/5 rounded-lg space-y-1 overflow-y-auto text-slate-300"
+        >
+          <div><span class="text-slate-500">[12:44:02]</span> <span class="text-slate-400">Инициализация Windows Winsock Bridge...</span></div>
+          <div><span class="text-slate-500">[12:44:02]</span> <span class="text-emerald-400">✓ Ядро успешно загружено. Порт сокета PX VM зарезервирован под GUI.</span></div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Interactive Dashboard scripts -->
+  <script>
+    // In-memory logs
+    const logsEl = document.getElementById('winLogs');
+    function appendLog(msg, colorClass = 'text-slate-400') {
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.innerHTML = '<span class="text-slate-500">[' + time + ']</span> <span class="' + colorClass + '">' + msg + '</span>';
+      logsEl.appendChild(div);
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    // Interactive slider changes
+    function updateVal(type, val) {
+      if (type === 'cpu') {
+        document.getElementById('cpu_val').innerText = val;
+        appendLog('Датчик нагрузки: cpu_usage изменен => ' + val + '%', 'text-sky-300');
+      }
+      if (type === 'mem') {
+        document.getElementById('mem_val').innerText = val;
+        appendLog('Регистр памяти: memory_payload изменен => ' + val + ' MB', 'text-emerald-300');
+      }
+      if (type === 'net') {
+        document.getElementById('net_val').innerText = val;
+        appendLog('Адаптер сети: network_payload изменен => ' + val + ' KB/s', 'text-orange-300');
+      }
+      pushChartData();
+    }
+
+    // Dynamic database forms
+    function addTableRow(e) {
+      e.preventDefault();
+      const dev = document.getElementById('db_device_id').value;
+      const key = document.getElementById('db_sync_key').value;
+      const val = document.getElementById('db_sync_val').value;
+      
+      const tbody = document.getElementById('dbTableBody');
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/5 hover:bg-white/5';
+      tr.innerHTML = '<td class="p-1 px-2 text-slate-300">' + dev + '</td><td class="p-1 px-2 text-slate-400">' + key + '</td><td class="p-1 px-2 text-cyan-400">' + val + '</td>';
+      tbody.appendChild(tr);
+      
+      appendLog('💾 [DB WRITE] SQL-запрос INSERT зафиксирован в секции: ' + dev, 'text-purple-300');
+      
+      // Clear inputs
+      document.getElementById('db_device_id').value = '';
+      document.getElementById('db_sync_key').value = '';
+      document.getElementById('db_sync_val').value = '';
+    }
+
+    // Real-time plotting coordinates array
+    const maxPoints = 25;
+    const history = [];
+    
+    // Seed initial points
+    for(let i=0; i<maxPoints; i++) {
+      history.push({ cpu: 45, mem: 76, net: 110 });
+    }
+
+    function pushChartData() {
+      const cpu = parseInt(document.getElementById('cpu_slider').value);
+      const mem = parseInt(document.getElementById('mem_slider').value);
+      const net = parseInt(document.getElementById('net_slider').value);
+      
+      history.push({ cpu, mem, net });
+      if (history.length > maxPoints) {
+        history.shift();
+      }
+      
+      drawPaths();
+    }
+
+    function drawPaths() {
+      let cpuD = '';
+      let memD = '';
+      let netD = '';
+      
+      const widthStep = 500 / (maxPoints - 1);
+      
+      for(let i=0; i<history.length; i++) {
+        const x = i * widthStep;
+        
+        // Map 0-150 range onto the 160px height of SVG (leaving 10px padding top and bottom)
+        const scaleVal = (val, max) => 150 - (val / max) * 130;
+        
+        const cpuY = scaleVal(history[i].cpu, 100);
+        const memY = scaleVal(history[i].mem, 150);
+        const netY = scaleVal(history[i].net, 150);
+        
+        if (i === 0) {
+          cpuD = 'M ' + x + ' ' + cpuY;
+          memD = 'M ' + x + ' ' + memY;
+          netD = 'M ' + x + ' ' + netY;
+        } else {
+          cpuD += ' L ' + x + ' ' + cpuY;
+          memD += ' L ' + x + ' ' + memY;
+          netD += ' L ' + x + ' ' + netY;
+        }
+      }
+      
+      document.getElementById('cpu_path').setAttribute('d', cpuD);
+      document.getElementById('mem_path').setAttribute('d', memD);
+      document.getElementById('net_path').setAttribute('d', netD);
+    }
+
+    // Auto stream (AutoPilot simulation)
+    let autoPilotInterval = null;
+    function toggleAutoPilot() {
+      const btn = document.getElementById('toggle_stream_btn');
+      if (autoPilotInterval) {
+        clearInterval(autoPilotInterval);
+        autoPilotInterval = null;
+        btn.innerText = '⚡ Стример: ВЫКЛ';
+        btn.className = 'win-button px-3 py-1 bg-white/5 text-[9px] font-bold text-slate-300 hover:text-white rounded border border-white/10';
+        appendLog('Стример деактивирован. Запись флуктуаций приостановлена.', 'text-slate-500');
+      } else {
+        btn.innerText = '🔥 Стример: АКТИВЕН';
+        btn.className = 'win-accent-button px-3 py-1 text-[9px] font-bold text-white rounded animate-pulse';
+        appendLog('Стример активирован. Генерация непрерывного потока telemetry...', 'text-sky-300');
+        
+        autoPilotInterval = setInterval(() => {
+          // Jitter sliders
+          const cpuS = document.getElementById('cpu_slider');
+          const memS = document.getElementById('mem_slider');
+          const netS = document.getElementById('net_slider');
+          
+          cpuS.value = Math.max(10, Math.min(100, parseInt(cpuS.value) + Math.floor(Math.random() * 14 - 7)));
+          memS.value = Math.max(10, Math.min(150, parseInt(memS.value) + Math.floor(Math.random() * 18 - 9)));
+          netS.value = Math.max(0, Math.min(150, parseInt(netS.value) + Math.floor(Math.random() * 20 - 10)));
+          
+          document.getElementById('cpu_val').innerText = cpuS.value;
+          document.getElementById('mem_val').innerText = memS.value;
+          document.getElementById('net_val').innerText = netS.value;
+          
+          pushChartData();
+        }, 800);
+      }
+    }
+
+    function clearConsoleLog() {
+      logsEl.innerHTML = '<div><span class="text-slate-500">[' + new Date().toLocaleTimeString() + ']</span> <span class="text-slate-500 italic">Логи очищены.</span></div>';
+    }
+
+    // Draw initial empty state paths
+    pushChartData();
+  </script>
+
+</body>
+</html>
+`,
+  },
+  {
     name: "launch_server.js",
     path: "/launch_server.js",
     platform: "custom",
