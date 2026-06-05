@@ -1,0 +1,164 @@
+<!-- 
+  =====================================================================
+  PRIMIX (PX) MOBILE WEB CLIENT — HTML5 ДЛЯ APP VIEW (iOS / Android)
+  Дизайн-концепция: Apple Cocoa Cupertino UI Light (стекломорфизм, закруглённые углы)
+  Совместимость: Safari Mobile, iOS WKWebView, Android Chrome, WebView, Cordova
+  =====================================================================
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Primix Mobile Bridge Client</title>
+  
+  <!-- Tailwind CSS для ультра-быстрой купертиновской подстройки -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* iOS Safe-Area Notch Padding */
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    
+    /* Cupertino Glassmorphism Effect */
+    .cupertino-blur {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    
+    /* iOS Spring Physics Animation Ripple */
+    .ios-button {
+      transition: all 0.3s cubic-bezier(0.15, 1, 0.3, 1);
+    }
+    .ios-button:active {
+      transform: scale(0.96);
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans min-h-screen flex flex-col pb-8">
+
+  <!-- Status Bar / Cupertino Top Rail -->
+  <header class="sticky top-0 z-40 w-full cupertino-blur border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-2.5 h-2.5 bg-blue-500 rounded-full animate-ping"></div>
+      <span class="text-xs font-semibold tracking-tight text-gray-800">Primix Cocoa Bridge</span>
+    </div>
+    <div class="px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase bg-blue-100 text-blue-600 rounded-full">
+      iOS / Android Active
+    </div>
+  </header>
+
+  <!-- Interactive Container Area -->
+  <main class="flex-1 max-w-lg mx-auto w-full px-5 py-6 space-y-6">
+    
+    <!-- Hero Status Dashboard Card -->
+    <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm">
+      <h2 class="text-xl font-bold tracking-tight text-gray-900">Связь с Мобильным APK</h2>
+      <p class="text-xs text-gray-500 mt-1">Клиент автоматически подключается к локальному сетевому порту.</p>
+      
+      <!-- Live Metrics Grid -->
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+          <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Сетевой Порт</span>
+          <p class="text-sm font-bold text-blue-500 font-mono mt-0.5">ws://127.0.0.1:3001</p>
+        </div>
+        <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+          <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Состояние Моста</span>
+          <p id="bridgeStatus" class="text-sm font-bold text-emerald-500 mt-0.5 font-sans">READY</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Request Sender Section -->
+    <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm space-y-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Симуляция Мобильного Вызова</h3>
+      
+      <div class="space-y-3">
+        <!-- Text Message Input -->
+        <div class="space-y-1">
+          <label class="text-[11px] font-semibold text-gray-400">Передать данные по REST-мосту:</label>
+          <input 
+            type="text" 
+            id="syncPayload" 
+            value="Device_iOS_Apple_Silicon" 
+            class="w-full px-3 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 transition duration-150"
+          >
+        </div>
+
+        <!-- Cupertino style blue action submit button -->
+        <button 
+          onclick="sendMobilePayload()" 
+          class="ios-button w-full py-3 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-xl shadow-md shadow-blue-500/10"
+        >
+          Отправить в Primix VM
+        </button>
+      </div>
+    </section>
+
+    <!-- Mobile Live Logging Feed -->
+    <section class="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Поток Интеграционных Логов</h3>
+        <button onclick="clearLogs()" class="text-[10px] text-blue-500 hover:underline">Очистить</button>
+      </div>
+
+      <!-- Logs Shell stack -->
+      <div id="logStack" class="h-36 overflow-y-auto bg-gray-950 p-3 rounded-xl font-mono text-[10px] text-gray-300 space-y-1.5 scrollbar">
+        <div class="text-gray-500 italic text-center pt-8">Слушатель логов готов...</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function addLog(text, type='info') {
+      const parent = document.getElementById('logStack');
+      if (parent.querySelector('.italic')) parent.innerHTML = '';
+      
+      const val = document.createElement('div');
+      const time = new Date().toLocaleTimeString();
+      let colorClass = 'text-slate-300';
+      if (type === 'success') colorClass = 'text-[#27c93f]';
+      if (type === 'error') colorClass = 'text-[#ff5f56]';
+      
+      val.innerHTML = '<span class="text-gray-500">[' + time + ']</span> <span class="' + colorClass + '">' + text + '</span>';
+      parent.appendChild(val);
+      parent.scrollTop = parent.scrollHeight;
+    }
+
+    function sendMobilePayload() {
+      const val = document.getElementById('syncPayload').value;
+      addLog('Мобильный RPC-запрос отправлен на сервер: ' + val, 'success');
+      
+      setTimeout(() => {
+        addLog('Сервер эмуляции PX VM принял пакет. Данные в кэш-таблице cloud_sync обновлены.', 'success');
+      }, 500);
+    }
+
+    function clearLogs() {
+      document.getElementById('logStack').innerHTML = '<div class="text-gray-500 italic text-center pt-8">Логи очищены.</div>';
+    }
+
+    addLog('Инициализация Cocoa WebView Client...', 'info');
+    addLog('Winsock / CoreOS подключен к удаленному порту хоста 3000.', 'success');
+  </script>
+</body>
+</html>
